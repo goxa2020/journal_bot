@@ -4,7 +4,6 @@ pybabel extract --input-dirs=. -o bot/locales/messages.pot --project=messages.
 2. Init translations
 pybabel init -i bot/locales/messages.pot -d bot/locales -D messages -l en
 pybabel init -i bot/locales/messages.pot -d bot/locales -D messages -l ru
-pybabel init -i bot/locales/messages.pot -d bot/locales -D messages -l uk
 
 3. Compile translations
 pybabel compile -d bot/locales -D messages --statistics
@@ -32,7 +31,7 @@ class ACLMiddleware(I18nMiddleware):
     async def get_locale(self, event: TelegramObject, data: dict[str, Any]) -> str:
         session: AsyncSession = data["session"]
 
-        if hasattr(event, "chat_member"):
+        if hasattr(event, 'chat_member'):
             return self.DEFAULT_LANGUAGE_CODE
 
         user: User | None = getattr(event, "from_user", None)

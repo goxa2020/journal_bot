@@ -9,10 +9,12 @@ from sentry_sdk.integrations.loguru import LoggingLevels, LoguruIntegration
 from bot.core.config import settings
 from bot.core.loader import app, bot, dp
 from bot.handlers import get_handlers_router
-from bot.handlers.metrics import MetricsView
+from bot.handlers.message.metrics import MetricsView
 from bot.keyboards.default_commands import remove_default_commands, set_default_commands
 from bot.middlewares import register_middlewares
 from bot.middlewares.prometheus import prometheus_middleware_factory
+from bot.services.admins import send_to_admins
+# from aiogram.utils.i18n import gettext as _
 
 
 async def on_startup() -> None:
@@ -37,7 +39,7 @@ async def on_startup() -> None:
     states: dict[bool | None, str] = {
         True: "Enabled",
         False: "Disabled",
-        None: "Unknown (This's not a bot)",
+        None: "Unknown (This is not a bot)",
     }
 
     logger.info(f"Groups Mode  - {states[bot_info.can_join_groups]}")
@@ -45,6 +47,8 @@ async def on_startup() -> None:
     logger.info(f"Inline Mode  - {states[bot_info.supports_inline_queries]}")
 
     logger.info("bot started")
+
+    await send_to_admins(bot, "bot started")
 
 
 async def on_shutdown() -> None:
@@ -62,8 +66,8 @@ async def on_shutdown() -> None:
 
 
 async def setup_webhook() -> None:
-    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application  # noqa: PLC0415
-    from aiohttp.web import AppRunner, TCPSite  # noqa: PLC0415
+    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+    from aiohttp.web import AppRunner, TCPSite
 
     await bot.set_webhook(
         settings.webhook_url,

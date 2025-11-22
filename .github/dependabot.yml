@@ -6,15 +6,15 @@ updates:
     labels:
       - dependencies
     schedule:
-      interval: "daily"
+      interval: daily
       time: "02:00"
     open-pull-requests-limit: 10
 
-  - package-ecosystem: "github-actions"
+  - package-ecosystem: github-actions
     directory: "/"
     labels:
       - dependencies
     schedule:
-      interval: "daily"
+      interval: daily
       time: "02:00"
     open-pull-requests-limit: 10

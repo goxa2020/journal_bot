@@ -1,3 +1,4 @@
+# ruff: noqa: TC001, TC003, A003, F821
 from __future__ import annotations
 
 from sqlalchemy.orm import Mapped, mapped_column
@@ -20,3 +21,6 @@ class UserModel(Base):
     is_suspicious: Mapped[bool] = mapped_column(default=False)
     is_block: Mapped[bool] = mapped_column(default=False)
     is_premium: Mapped[bool] = mapped_column(default=False)
+
+    def __str__(self) -> str:
+        return f'{self.first_name} {self.last_name}'

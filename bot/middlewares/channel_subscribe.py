@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 class ChannelSubscribeMiddleware(BaseMiddleware):
     """The middleware is only guaranteed to work for other users if the bot is an administrator in the chat."""
+    unsatisfactoryStatuses = {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED, ChatMemberStatus.RESTRICTED}
 
     def __init__(self, chat_ids: list[int | str] | int | str) -> None:
         self.chat_ids = chat_ids
@@ -46,7 +47,7 @@ class ChannelSubscribeMiddleware(BaseMiddleware):
                 except TelegramNotFound:
                     return False
 
-                if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED, ChatMemberStatus.RESTRICTED}:
+                if member.status in self.unsatisfactoryStatuses:
                     return False
 
         elif isinstance(self.chat_ids, str | int):
@@ -55,7 +56,7 @@ class ChannelSubscribeMiddleware(BaseMiddleware):
             except TelegramNotFound:
                 return False
 
-            if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.KICKED}:
+            if member.status in self.unsatisfactoryStatuses:
                 return False
 
         return True

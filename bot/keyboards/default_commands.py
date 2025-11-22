@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 users_commands: dict[str, dict[str, str]] = {
     "en": {
+        "start": "launch",
         "help": "help",
         "contacts": "developer contact details",
         "menu": "main menu with earning schemes",
@@ -15,6 +16,7 @@ users_commands: dict[str, dict[str, str]] = {
         "supports": "support contacts",
     },
     "uk": {
+        "start": "launch",
         "help": "help",
         "contacts": "developer contact details",
         "menu": "main menu with earning schemes",
@@ -22,11 +24,12 @@ users_commands: dict[str, dict[str, str]] = {
         "supports": "support contacts",
     },
     "ru": {
-        "help": "help",
-        "contacts": "developer contact details",
-        "menu": "main menu with earning schemes",
-        "settings": "setting information about you",
-        "supports": "support contacts",
+        "start": "Начать",
+        "help": "Помощь",
+        "contacts": "Контактные данные разработчика",
+        "menu": "Основное меню",
+        "settings": "Настройки",
+        "supports": "Поддержка",
     },
 }
 
@@ -40,8 +43,8 @@ admins_commands: dict[str, dict[str, str]] = {
         "stats": "Show bot stats",
     },
     "ru": {
-        "ping": "Check bot ping",
-        "stats": "Show bot stats",
+        "ping": "Проверка бота",
+        "stats": "Показать статистику бота",
     },
 }
 
