@@ -58,9 +58,7 @@ class ChannelSubscribeMiddleware(BaseMiddleware):
 
         elif isinstance(self.chat_ids, str | int):
             try:
-                member = await bot(
-                    GetChatMember(chat_id=self.chat_ids, user_id=user_id)
-                )
+                member = await bot(GetChatMember(chat_id=self.chat_ids, user_id=user_id))
             except TelegramNotFound:
                 return False
 

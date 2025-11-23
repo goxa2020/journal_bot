@@ -23,4 +23,4 @@ class UserModel(Base):
     is_premium: Mapped[bool] = mapped_column(default=False)
 
     def __str__(self) -> str:
-        return f'{self.first_name} {self.last_name}'
+        return f"{self.first_name} {self.last_name}"
