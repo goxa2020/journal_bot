@@ -3,6 +3,8 @@ import asyncio
 
 import sentry_sdk
 import uvloop
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp.web import AppRunner, TCPSite
 from loguru import logger
 from sentry_sdk.integrations.loguru import LoggingLevels, LoguruIntegration
 
@@ -14,8 +16,7 @@ from bot.keyboards.default_commands import remove_default_commands, set_default_
 from bot.middlewares import register_middlewares
 from bot.middlewares.prometheus import prometheus_middleware_factory
 from bot.services.admins import send_to_admins
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp.web import AppRunner, TCPSite
+
 # from aiogram.utils.i18n import gettext as _
 
 

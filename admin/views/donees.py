@@ -1,4 +1,4 @@
-# # ruff: noqa: RUF012
+#
 # from flask_admin.contrib.sqla import ModelView
 #
 #

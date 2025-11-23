@@ -13,6 +13,6 @@ if TYPE_CHECKING:
 async def send_to_admins(bot: Bot, message: str) -> None:
     async with sessionmaker() as session:
         admins_ids = await get_admins_ids(session)
-    logger.info(f"Отправка сообщения администраторам")
+    logger.info("Отправка сообщения администраторам")
     for admin_id in admins_ids:
         await bot.send_message(chat_id=admin_id, text=message)
