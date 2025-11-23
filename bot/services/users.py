@@ -109,7 +109,7 @@ async def get_all_users(session: AsyncSession) -> list[UserModel]:
 
 
 @cached(key_builder=lambda session: build_key())
-async def get_admins_ids(session: AsyncSession) -> list[UserModel]:
+async def get_admins_ids(session: AsyncSession) -> list[int]:
     query = select(UserModel.id).filter_by(is_admin=True)
 
     result = await session.execute(query)
