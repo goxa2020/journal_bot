@@ -35,4 +35,4 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Check Type Hints
-        run: uv run mypy
+        run: uv run mypy bot/

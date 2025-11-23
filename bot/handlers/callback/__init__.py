@@ -1,9 +1,8 @@
 from aiogram import Router
+from . import info
 
 
 def get_callback_handlers_router() -> Router:
-    from . import info
-
     router = Router()
     router.include_router(info.router)
 

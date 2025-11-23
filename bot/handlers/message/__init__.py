@@ -1,9 +1,8 @@
 from aiogram import Router
+from . import export_users, info, menu, start, support
 
 
 def get_message_handlers_router() -> Router:
-    from . import export_users, info, menu, start, support
-
     router = Router()
     router.include_router(start.router)
     router.include_router(info.router)
