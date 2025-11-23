@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from aiogram import BaseMiddleware, Bot
@@ -14,10 +15,11 @@ if TYPE_CHECKING:
 
 class ChannelSubscribeMiddleware(BaseMiddleware):
     """The middleware is only guaranteed to work for other users if the bot is an administrator in the chat."""
+
     UNSATISFACTORY_STATUSES: ClassVar[set] = {
         ChatMemberStatus.LEFT,
         ChatMemberStatus.KICKED,
-        ChatMemberStatus.RESTRICTED
+        ChatMemberStatus.RESTRICTED,
     }
 
     def __init__(self, chat_ids: list[int | str] | int | str) -> None:
@@ -56,7 +58,9 @@ class ChannelSubscribeMiddleware(BaseMiddleware):
 
         elif isinstance(self.chat_ids, str | int):
             try:
-                member = await bot(GetChatMember(chat_id=self.chat_ids, user_id=user_id))
+                member = await bot(
+                    GetChatMember(chat_id=self.chat_ids, user_id=user_id)
+                )
             except TelegramNotFound:
                 return False
 
