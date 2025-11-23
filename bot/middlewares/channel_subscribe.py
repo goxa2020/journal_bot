@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class ChannelSubscribeMiddleware(BaseMiddleware):
     """The middleware is only guaranteed to work for other users if the bot is an administrator in the chat."""
 
-    UNSATISFACTORY_STATUSES: ClassVar[set] = {
+    UNSATISFACTORY_STATUSES: ClassVar[set[ChatMemberStatus]] = {
         ChatMemberStatus.LEFT,
         ChatMemberStatus.KICKED,
         ChatMemberStatus.RESTRICTED,
