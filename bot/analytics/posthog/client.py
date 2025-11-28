@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from loguru import logger
 
 from bot.analytics.types import AbstractAnalyticsLogger, BaseEvent
@@ -33,7 +33,7 @@ class PosthogTelegramLogger(AbstractAnalyticsLogger):
                 url,
                 headers=self._headers,
                 json=params,
-                timeout=self._timeout,
+                timeout=ClientTimeout(total=self._timeout),
             ) as response,
         ):
             json_response = await response.json(content_type="application/json")
