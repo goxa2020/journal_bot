@@ -38,12 +38,12 @@ class AnalyticsService(metaclass=SingletonMeta):
         """Decorator for tracking events in Amplitude, Google Analytics or Posthog."""
 
         def decorator(
-            handler: Callable[[Message | CallbackQuery, dict[str, Any]], Awaitable[_Func]],
+            handler: Callable[..., Awaitable[_Func]],
         ) -> Callable[..., Awaitable[_Func]]:
             @wraps(handler)
-            async def wrapper(update: Message | CallbackQuery, *args: Any) -> Any:
+            async def wrapper(update: Message | CallbackQuery, *args: Any, **kwargs: Any) -> Any:
                 if not self.logger:
-                    return await handler(update, *args)
+                    return await handler(update, *args, **kwargs)
 
                 if (isinstance(update, Message | CallbackQuery)) and update.from_user:
                     user_id = update.from_user.id
@@ -53,10 +53,13 @@ class AnalyticsService(metaclass=SingletonMeta):
                     url = update.from_user.url
                     language = update.from_user.language_code
                 else:
-                    return None
+                    return await handler(update, *args, **kwargs)
 
-                chat_id: int | None
-                chat_type: str | None
+                chat_id: int | None = None
+                chat_type: str | None = None
+                text: str | None = None
+                command: str | None = None
+
                 if isinstance(update, Message):
                     chat_id = update.chat.id
                     chat_type = update.chat.type
@@ -88,7 +91,7 @@ class AnalyticsService(metaclass=SingletonMeta):
                     ),
                 )
                 try:
-                    result = await handler(update, *args)
+                    result = await handler(update, *args, **kwargs)
                 except Exception as e:
                     await self._track_error(user_id, str(e))
                     raise
