@@ -61,3 +61,38 @@ msgstr "👛 Wallet"
 #: bot/keyboards/inline/menu.py:10
 msgid "info button"
 msgstr "Info"
+
+#: bot/keyboards/inline/menu.py
+msgid "auth.menu_btn"
+msgstr "🔐 Authorize"
+
+#: bot/handlers/message/auth.py
+msgid "auth.enter_login"
+msgstr "📧 Enter edu email (login):"
+
+msgid "auth.enter_login_invalid"
+msgstr "❌ Invalid email format. Try again:"
+
+msgid "auth.enter_pass"
+msgstr "🔑 Enter edu password:"
+
+msgid "auth.enter_pass_invalid"
+msgstr "❌ Password cannot be empty. Try again:"
+
+msgid "auth.success"
+msgstr "✅ Authorization saved successfully!"
+
+msgid "auth.error"
+msgstr "❌ Error saving. Try again or cancel."
+
+msgid "cancelled"
+msgstr "❌ Action cancelled."
+
+msgid "cancel_btn"
+msgstr "❌ Cancel"
+
+msgid "sync_btn"
+msgstr "🔄 Sync"
+
+msgid "stats_btn"
+msgstr "📊 Stats"

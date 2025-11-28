@@ -61,3 +61,38 @@ msgstr "👛 Мой кошелёк"
 #: bot/keyboards/inline/menu.py:10
 msgid "info button"
 msgstr "ℹ️ Информация"
+
+#: bot/keyboards/inline/menu.py
+msgid "auth.menu_btn"
+msgstr "🔐 Авторизоваться"
+
+#: bot/handlers/message/auth.py
+msgid "auth.enter_login"
+msgstr "📧 Введите edu email (логин):"
+
+msgid "auth.enter_login_invalid"
+msgstr "❌ Неверный формат email. Попробуйте снова:"
+
+msgid "auth.enter_pass"
+msgstr "🔑 Введите edu пароль:"
+
+msgid "auth.enter_pass_invalid"
+msgstr "❌ Пароль не может быть пустым. Попробуйте снова:"
+
+msgid "auth.success"
+msgstr "✅ Авторизация успешно сохранена!"
+
+msgid "auth.error"
+msgstr "❌ Ошибка при сохранении. Попробуйте снова или отмените."
+
+msgid "cancelled"
+msgstr "❌ Действие отменено."
+
+msgid "cancel_btn"
+msgstr "❌ Отмена"
+
+msgid "sync_btn"
+msgstr "🔄 Синхронизировать"
+
+msgid "stats_btn"
+msgstr "📊 Статистика"
