@@ -31,6 +31,9 @@ async def cancel_handler(
     session: AsyncSession,
     state: FSMContext,
 ) -> None:
+    if not message.from_user:
+        return
+
     await state.clear()
     await message.answer(_("cancelled"), reply_markup=ReplyKeyboardRemove())
     kb = await get_main_menu(session, message.from_user.id)
@@ -71,6 +74,9 @@ async def process_password(
     session: AsyncSession,
     state: FSMContext,
 ) -> None:
+    if not message.from_user:
+        return
+
     if not message.text:
         await message.answer(
             _("auth.enter_login_invalid"),

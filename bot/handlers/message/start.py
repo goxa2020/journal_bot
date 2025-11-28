@@ -14,5 +14,8 @@ router = Router(name="start")
 @analytics.track_event("Sign Up")
 async def start_handler(message: Message, session: AsyncSession) -> None:
     """Welcome message."""
+    if not message.from_user:
+        return
+
     kb = await get_main_menu(session, message.from_user.id)
     await message.answer(_("first message"), reply_markup=kb)

@@ -12,5 +12,8 @@ router = Router(name="menu")
 @router.message(Command(commands=["menu", "main"]))
 async def menu_handler(message: Message, session: AsyncSession) -> None:
     """Return main menu."""
+    if not message.from_user:
+        return
+
     kb = await get_main_menu(session, message.from_user.id)
     await message.answer(_("title main keyboard"), reply_markup=kb)

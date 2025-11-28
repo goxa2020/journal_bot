@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.i18n import gettext as _
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,8 @@ async def auth_start(
     session: AsyncSession,
     state: FSMContext,
 ) -> None:
+    if not isinstance(callback.message, Message):
+        return
     user_id = callback.from_user.id
     if await is_authorized(session, user_id):
         await callback.answer("Вы уже авторизованы.")
