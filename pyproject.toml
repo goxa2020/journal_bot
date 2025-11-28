@@ -1,11 +1,11 @@
 [project]
-name = "telegram-bot-template"
-version = "2.4.0"
-description = "Best way to create a scalable telegram bot with analytics"
+name = "journal_bot"
+version = "0.0.2"
+description = "journal_bot"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "donBarbos", email = "donbarbos@proton.me"},
+    {name = "george", email = "goxa1@vk.com"},
 ]
 package-mode = false
 requires-python = "<4.0,>=3.10"
@@ -13,11 +13,12 @@ dependencies = [
     "sqlalchemy<3.0.0,>=2.0.38",
     "pydantic<3.0.0,>=2.10.6",
     "pydantic-settings<3.0.0,>=2.8.1",
+    "cryptography>=46.0.3",
+    "aiogram==3.19.0",
 ]
 
 [project.urls]
-homepage = "https://github.com/donBarbos/telegram-bot-template"
-repository = "https://github.com/donBarbos/telegram-bot-template"
+repository = "https://github.com/goxa2020/journal_bot"
 
 [dependency-groups]
 bot = [
@@ -50,6 +51,7 @@ dev = [
     "mypy>=1.15.0,<2.0.0",
     "pre-commit>=4.2.0,<5.0.0",
     "types-cachetools>=5.5.0.20240820,<7.0.0.0",
+    "alembic>=1.15.2",
 ]
 
 [tool.ruff]
@@ -57,7 +59,7 @@ fix = true
 unsafe-fixes = true
 line-length = 120
 lint.select = ["ALL"]
-lint.ignore = ["D", "ANN401", "FIX002", "COM812", "ISC001", "FBT001", "FBT002", "ERA", "ARG005", "PGH003", "A005"]
+lint.ignore = ["D", "ANN401", "FIX002", "COM812", "ISC001", "FBT001", "FBT002", "ERA", "ARG005", "PGH003", "A005", "RUF001", "RUF002", "RUF003"]
 cache-dir = "/tmp/ruff-cache/"
 extend-exclude = ["logs", "configs", "migrations"]
 
@@ -69,7 +71,7 @@ known-local-folder = ["bot", "admin"]
 "tests/*.py" = ["ANN401", "S101", "S311"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 files = "bot/*.py"
 plugins = ["pydantic.mypy"]
 ignore_missing_imports = false
