@@ -72,9 +72,9 @@ class JournalParser:
         journal_data: list[dict[str, Any]] = data["journalData"]
         journal_dates: list[dict[str, Any]] = data["journalDates"]
 
-        # id значения -> объект значения
         val_by_id: dict[int, dict[str, Any]] = {
-            int(v["id"]): v for v in journal_vals
+            int(v["id"]): v
+            for v in journal_vals  # id значения -> объект значения
         }
 
         student_row = self.find_student_row(
@@ -163,12 +163,11 @@ class JournalParser:
                     raise InvalidCredsError(msg)
                 token = token_json["data"]["accessToken"]
 
-        # Client с токеном
         headers = {"Authorization": f"Bearer {token}"}
         async with aiohttp.ClientSession(
-            headers=headers, timeout=timeout
+            headers=headers,
+            timeout=timeout,  # Client с токеном
         ) as client:
-
             # Определить учебный год
             now = datetime.now(timezone.utc)
             september = 9
@@ -222,9 +221,7 @@ class JournalParser:
                         continue
 
                     # Парсинг уроков (первый студент)
-                    lessons = self.get_student_lessons_last_days_from_journal(
-                        journal_json, days=730
-                    )
+                    lessons = self.get_student_lessons_last_days_from_journal(journal_json, days=730)
 
                     grades = [
                         {

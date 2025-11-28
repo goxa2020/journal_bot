@@ -12,5 +12,6 @@ async def main() -> None:
     with suppress(InvalidCredsError, ParseError, Exception):
         await parser.parse_grades("dummy", "dummy")
 
+
 if __name__ == "__main__":
     asyncio.run(main())

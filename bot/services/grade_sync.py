@@ -31,9 +31,7 @@ async def sync_grades_for_user(
     # Получить credentials
     username, password = await get_edu_credentials(session, user_id)
     if username is None or password is None:
-        await SyncLogsService.create(
-            session, user_id, status="error", error_msg="Нет учетных данных"
-        )
+        await SyncLogsService.create(session, user_id, status="error", error_msg="Нет учетных данных")
         return 0
 
     parser = JournalParser()
@@ -42,19 +40,13 @@ async def sync_grades_for_user(
     try:
         parsed_data = await parser.parse_grades(username, password)
     except InvalidCredsError:
-        await SyncLogsService.create(
-            session, user_id, status="error", error_msg="Неверные учетные данные"
-        )
+        await SyncLogsService.create(session, user_id, status="error", error_msg="Неверные учетные данные")
         return 0
     except ParseError as e:
-        await SyncLogsService.create(
-            session, user_id, status="error", error_msg=f"Ошибка парсинга: {e!s}"
-        )
+        await SyncLogsService.create(session, user_id, status="error", error_msg=f"Ошибка парсинга: {e!s}")
         return 0
     except Exception as e:  # noqa: BLE001
-        await SyncLogsService.create(
-            session, user_id, status="error", error_msg=f"Неожиданная ошибка: {e!s}"
-        )
+        await SyncLogsService.create(session, user_id, status="error", error_msg=f"Неожиданная ошибка: {e!s}")
         return 0
 
     # Обработка parsed data
@@ -65,18 +57,12 @@ async def sync_grades_for_user(
         teacher = subject_info["teacher"]
 
         # Найти или создать Subject
-        existing_subject: Subject | None = await SubjectsService.get_by_code(
-            session, user_id, code
-        )
+        existing_subject: Subject | None = await SubjectsService.get_by_code(session, user_id, code)
         if not existing_subject:
-            existing_subject = await SubjectsService.create(
-                session, user_id, name, code, teacher
-            )
+            existing_subject = await SubjectsService.create(session, user_id, name, code, teacher)
 
         # Получить существующие grades
-        existing_grades: list[Grade] = await GradesService.get_by_subject(
-            session, existing_subject.id
-        )
+        existing_grades: list[Grade] = await GradesService.get_by_subject(session, existing_subject.id)
         existing_keys = {(g.date.isoformat(), g.value) for g in existing_grades}
 
         # Upsert new grades
@@ -103,8 +89,6 @@ async def sync_grades_for_user(
         await asyncio.sleep(1.5)
 
     # Лог успеха
-    await SyncLogsService.create(
-        session, user_id, status="success", grades_count=new_grades_count
-    )
+    await SyncLogsService.create(session, user_id, status="success", grades_count=new_grades_count)
 
     return new_grades_count

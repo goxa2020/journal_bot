@@ -43,7 +43,7 @@ class SyncLogsService:
     ) -> list[SyncLog]:
         """Получить последние логи пользователя."""
         query = (
-            select(SyncLog)
+            select(SyncLog)  # Запрос
             .filter_by(user_id=user_id)
             .order_by(desc(SyncLog.timestamp))
             .limit(limit)
@@ -59,7 +59,7 @@ class SyncLogsService:
     ) -> list[SyncLog]:
         """Получить логи с ошибками пользователя."""
         query = (
-            select(SyncLog)
+            select(SyncLog)  # Запрос
             .filter_by(user_id=user_id, status="error")
             .order_by(desc(SyncLog.timestamp))
         )

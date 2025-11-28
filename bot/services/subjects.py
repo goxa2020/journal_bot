@@ -68,8 +68,9 @@ class SubjectsService:
     ) -> None:
         """Обновить предмет."""
         updates = {
-            k: v for k, v in {"name": name, "code": code, "teacher": teacher}.items()
-            if v is not None
+            k: v
+            for k, v in {"name": name, "code": code, "teacher": teacher}.items()
+            if v is not None  # Выборка
         }
         if not updates:
             return
