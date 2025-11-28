@@ -1,17 +1,25 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.i18n import gettext as _
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.services.users import is_authorized
 
 
-def main_keyboard() -> InlineKeyboardMarkup:
-    """Use in main menu."""
-    buttons = [
-        [InlineKeyboardButton(text=_("wallet button"), callback_data="wallet")],
-        [InlineKeyboardButton(text=_("info button"), callback_data="info")],
-    ]
+async def get_main_menu(session: AsyncSession, user_id: int) -> InlineKeyboardMarkup:
+    """Главное меню с проверкой авторизации."""
+    builder = InlineKeyboardBuilder()
 
-    keyboard = InlineKeyboardBuilder(markup=buttons)
+    builder.button(text=_("info button"), callback_data="info")
 
-    keyboard.adjust(1, 1, 2)
+    authorized = await is_authorized(session, user_id)
 
-    return keyboard.as_markup()
+    if authorized:
+        builder.button(text=_("sync_btn"), callback_data="sync")
+        builder.button(text=_("stats_btn"), callback_data="stats")
+    else:
+        builder.button(text=_("auth.menu_btn"), callback_data="auth_start")
+
+    builder.adjust(1, repeat=True)
+
+    return builder.as_markup()
