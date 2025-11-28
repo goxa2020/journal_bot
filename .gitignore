@@ -133,3 +133,6 @@ dmypy.json
 
 # my env
 examples/
+.kilocode/
+.run/
+dev/
