@@ -1,7 +1,9 @@
 from __future__ import annotations
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
@@ -82,6 +84,8 @@ class Settings(BotSettings, DBSettings, CacheSettings):
     SENTRY_DSN: str | None = None
 
     AMPLITUDE_API_KEY: str  # or for example it could be POSTHOG_API_KEY
+
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 
 settings = Settings()

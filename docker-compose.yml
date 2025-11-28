@@ -24,6 +24,7 @@ services:
     depends_on:
       - pgbouncer
       - redis
+      - migrator
 
   admin:
     build:
@@ -128,7 +129,7 @@ services:
     networks:
       - app
     depends_on:
-      - bot
+      - pgbouncer
     volumes:
       - ./migrations:/usr/src/app/migrations
 
