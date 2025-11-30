@@ -98,6 +98,7 @@ class RoleView(ModelView):
                 return redirect(url_for("security.login", next=request.url))
         return None
 
+
 # ruff: noqa: RUF012
 class AdminView(RoleView):
     can_view_details = True

@@ -71,6 +71,14 @@ format:
     @uv run ruff check --fix .
     @uv run ruff format .
 
+# Run pre-commit on all files
+pre:
+    @uv run pre-commit run --all-files
+
+# Run mypy check on bot/
+mypy:
+    @uv run mypy bot/
+
 # Delete all temporary and generated files
 clean:
     # Remove specific directories and files if they exist

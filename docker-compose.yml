@@ -203,10 +203,10 @@ services:
       - ${PROMETHEUS_PORT}:${PROMETHEUS_PORT}
     depends_on:
       node-exporter:
-        condition: 
+        condition:
           service_healthy
       bot:
-        condition: 
+        condition:
           service_started
 
     networks:
@@ -241,7 +241,7 @@ services:
       - ${GRAFANA_PORT}:${GRAFANA_PORT}
     depends_on:
       prometheus:
-        condition: 
+        condition:
           service_healthy
     networks:
       - monitoring
