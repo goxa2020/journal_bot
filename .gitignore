@@ -136,3 +136,4 @@ examples/
 .kilocode/
 .run/
 dev/
+.vscode/

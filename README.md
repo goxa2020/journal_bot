@@ -5,26 +5,17 @@ Telegram бот для студентов ПИ ДГТУ с доступом к �
 </h3>
 
 <p align="center">
-  <a href="https://www.python.org/downloads">
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python">
-  </a>
-  <a href="https://github.com/goxa2020/journal_bot/blob/main/LICENSE">
-  <img src="https://img.shields.io/github/license/goxa2020/journal_bot?color=blue" alt="License">
-  </a>
-<a href="https://github.com/goxa2020/journal_bot/actions/workflows/linters.yml"><img src="https://img.shields.io/github/actions/workflow/status/goxa2020/journal_bot/linters.yml?label=linters" alt="Linters Status">
+<a href="https://www.python.org/downloads"><img alt="GitHub top language" src="https://img.shields.io/github/languages/top/goxa2020/journal_bot?logo=python&logoColor=white"></a>
+<a href="https://github.com/goxa2020/journal_bot/commits/main/"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/w/goxa2020/journal_bot?logo=conventionalcommits&logoColor=white&label=commits"></a>  
+<a href="https://github.com/goxa2020/journal_bot/actions/workflows/linters.yml"><img src="https://img.shields.io/github/actions/workflow/status/goxa2020/journal_bot/linters.yml?label=linters&logo=precommit&logoColor=white" alt="Linters Status"/>
 </a>
-  <a href="https://github.com/astral-sh/ruff">
-  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Code style">
-  </a>
-  <a href="https://github.com/astral-sh/uv">
-  <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="Package manager">
-  </a>
 </p>
 
 > [!WARNING]
 > **🚧 Проект находится в активной разработке**
 > 
-> Бот пока не доступен для публичного использования. Следите за обновлениями!
+> Бот пока не доступен для публичного использования.  
+> Следите за обновлениями!
 
 <!--
  > [!NOTE]
