@@ -41,4 +41,6 @@ class AuthMiddleware(BaseMiddleware):
 
         await add_user(session=session, user=user, referrer=referrer)
 
+        data["new_user"] = True
+
         return await handler(event, data)

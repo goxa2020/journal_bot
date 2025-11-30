@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-06-18 18:55+0300\n"
+"POT-Creation-Date: 2025-11-29 16:58+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -18,24 +18,69 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.17.0\n"
 
-#: bot/__main__.py:51
-msgid "bot started"
-msgstr "Bot started!"
+#: bot/handlers/callback/auth.py:28
+msgid "auth.enter_login"
+msgstr "📧 Enter edu email (login):"
 
-#: bot/handlers/callback/info.py:11 bot/handlers/message/info.py:11
-msgid "about"
-msgstr "ℹ️ <b>About</b>"
+#: bot/handlers/callback/info.py:10 bot/keyboards/inline/menu.py:13
+msgid "info button"
+msgstr "Info"
 
-#: bot/handlers/message/export_users.py:29
-#, fuzzy, python-brace-format
-msgid "user counter"
-msgstr "user counter: <b>{count}"
+#: bot/handlers/message/auth.py:28 bot/keyboards/reply/__init__.py:9
+msgid "cancel_btn"
+msgstr "❌ Cancel"
 
-#: bot/handlers/message/menu.py:13
+#: bot/handlers/message/auth.py:38
+msgid "cancelled"
+msgstr "❌ Action cancelled."
+
+#: bot/handlers/message/auth.py:40 bot/handlers/message/auth.py:103
+#: bot/handlers/message/menu.py:19
 msgid "title main keyboard"
 msgstr "📒 <b>Menu</b>."
 
+#: bot/handlers/message/auth.py:50 bot/handlers/message/auth.py:58
+msgid "auth.enter_login_invalid"
+msgstr "❌ Invalid email format. Try again:"
+
+#: bot/handlers/message/auth.py:65
+msgid "auth.enter_pass"
+msgstr "🔑 Enter edu password:"
+
+#: bot/handlers/message/auth.py:82 bot/handlers/message/auth.py:90
+msgid "auth.enter_pass_invalid"
+msgstr "❌ Password cannot be empty. Try again:"
+
+#: bot/handlers/message/auth.py:101
+msgid "auth.success"
+msgstr "✅ Authorization successfully!"
+
+#: bot/handlers/message/export_users.py:29
+#, fuzzy
+msgid "user counter"
+msgstr "user counter: <b>{count}"
+
+#: bot/handlers/message/info.py:11
+msgid "about"
+msgstr "ℹ️ <b>About</b>"
+
+#: bot/handlers/message/start.py:14
+msgid "welcome_back_1"
+msgstr "Long time no see! 😊"
+
 #: bot/handlers/message/start.py:15
+msgid "welcome_back_2"
+msgstr "Glad to see you again! 👋"
+
+#: bot/handlers/message/start.py:16
+msgid "welcome_back_3"
+msgstr "Hi again! 🌟"
+
+#: bot/handlers/message/start.py:17
+msgid "welcome_back_4"
+msgstr "Welcome back! 😄"
+
+#: bot/handlers/message/start.py:33
 msgid "first message"
 msgstr ""
 "👋 <b>Welcome to the bot.</b>\n"
@@ -54,45 +99,24 @@ msgstr "Support"
 msgid "back button"
 msgstr "🔙 Back"
 
-#: bot/keyboards/inline/menu.py:9
-msgid "wallet button"
-msgstr "👛 Wallet"
-
-#: bot/keyboards/inline/menu.py:10
-msgid "info button"
-msgstr "Info"
-
-#: bot/keyboards/inline/menu.py
-msgid "auth.menu_btn"
-msgstr "🔐 Authorize"
-
-#: bot/handlers/message/auth.py
-msgid "auth.enter_login"
-msgstr "📧 Enter edu email (login):"
-
-msgid "auth.enter_login_invalid"
-msgstr "❌ Invalid email format. Try again:"
-
-msgid "auth.enter_pass"
-msgstr "🔑 Enter edu password:"
-
-msgid "auth.enter_pass_invalid"
-msgstr "❌ Password cannot be empty. Try again:"
-
-msgid "auth.success"
-msgstr "✅ Authorization saved successfully!"
-
-msgid "auth.error"
-msgstr "❌ Error saving. Try again or cancel."
-
-msgid "cancelled"
-msgstr "❌ Action cancelled."
-
-msgid "cancel_btn"
-msgstr "❌ Cancel"
-
+#: bot/keyboards/inline/menu.py:18
 msgid "sync_btn"
 msgstr "🔄 Sync"
 
+#: bot/keyboards/inline/menu.py:19
 msgid "stats_btn"
 msgstr "📊 Stats"
+
+#: bot/keyboards/inline/menu.py:21
+msgid "auth.menu_btn"
+msgstr "🔐 Authorize"
+
+#~ msgid "wallet button"
+#~ msgstr "👛 Wallet"
+
+#~ msgid "auth.error"
+#~ msgstr "❌ Error saving. Try again or cancel."
+
+#~ msgid "welcome_back_5"
+#~ msgstr ""
+

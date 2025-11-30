@@ -8,4 +8,4 @@ def get_cancel_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text=_("cancel_btn"))
     builder.adjust(1)
-    return builder.as_markup()
+    return builder.as_markup(resize_keyboard=True)

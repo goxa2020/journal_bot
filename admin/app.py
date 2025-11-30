@@ -1,4 +1,3 @@
-# ruff: noqa: RUF012
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
@@ -99,7 +98,7 @@ class RoleView(ModelView):
                 return redirect(url_for("security.login", next=request.url))
         return None
 
-
+# ruff: noqa: RUF012
 class AdminView(RoleView):
     can_view_details = True
     can_delete = True
@@ -161,14 +160,12 @@ def index() -> Response:
 admin = Admin(
     app,
     name="Telegram Bot",
-    base_template="my_master.html",
     index_view=CustomAdminIndexView(
         name="Home",
         url="/admin",
         menu_icon_type=ICON_TYPE_FONT_AWESOME,
         menu_icon_value="fa-home",
     ),
-    template_mode="bootstrap4",
 )
 
 admin.add_view(
@@ -208,7 +205,6 @@ admin.add_view(
 @security.context_processor
 def security_context_processor() -> dict[str, Any]:
     return {
-        "admin_base_template": admin.base_template,
         "admin_view": admin.index_view,
         "h": helpers,
         "get_url": url_for,

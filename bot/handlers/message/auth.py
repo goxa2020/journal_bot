@@ -79,7 +79,7 @@ async def process_password(
 
     if not message.text:
         await message.answer(
-            _("auth.enter_login_invalid"),
+            _("auth.enter_pass_invalid"),
             reply_markup=get_cancel_keyboard(),
         )
         return
