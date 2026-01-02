@@ -14,7 +14,7 @@ dependencies = [
     "pydantic<3.0.0,>=2.10.6",
     "pydantic-settings<3.0.0,>=2.8.1",
     "cryptography>=46.0.3",
-    "aiogram==3.23.0",
+    "aiogram==3.24.0",
 ]
 
 [project.urls]
