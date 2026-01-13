@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from aiogram.types import BufferedInputFile, Message
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from bot.database.models import UserModel
+    from bot.database.models import User
 
 
 router = Router(name="export_users")
@@ -22,7 +22,7 @@ router = Router(name="export_users")
 @router.message(Command(commands="export_users"), AdminFilter())
 async def export_users_handler(message: Message, session: AsyncSession) -> None:
     """Export all users in csv file."""
-    all_users: list[UserModel] = await get_all_users(session)
+    all_users: list[User] = await get_all_users(session)
     document: BufferedInputFile = await convert_users_to_csv(all_users)
     count: int = await get_user_count(session)
 

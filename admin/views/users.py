@@ -12,18 +12,16 @@ class UserView(ModelView):
     details_modal = True
     export_types = ["csv", "xlsx", "json", "yaml"]
 
-    column_searchable_list = ["id", "username", "first_name", "last_name"]
-    column_filters = ["is_admin", "is_suspicious", "is_block", "is_premium", "created_at"]
+    column_searchable_list = ["id", "full_name"]
+    column_filters = ["is_admin", "is_authenticated", "notification_enabled", "group_name", "created_at"]
     column_list = [
         "id",
-        "username",
-        "first_name",
-        "last_name",
+        "full_name",
         "language_code",
         "is_admin",
-        "is_suspicious",
-        "is_block",
-        "is_premium",
+        "is_authenticated",
+        "notification_enabled",
+        "group_name",
         "created_at",
     ]
     column_default_sort = ("created_at", True)

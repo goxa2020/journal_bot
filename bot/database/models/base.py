@@ -2,12 +2,18 @@ from __future__ import annotations
 import datetime
 from typing import Annotated
 
-from sqlalchemy import BigInteger, text
+from sqlalchemy import BigInteger, Column, ForeignKey, Table, text
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
-int_pk = Annotated[int, mapped_column(primary_key=True, unique=True, autoincrement=False)]
-big_int_pk = Annotated[int, mapped_column(primary_key=True, unique=True, autoincrement=False, type_=BigInteger)]
+int_pk = Annotated[int, mapped_column(primary_key=True, unique=True, autoincrement=False, index=True)]
+big_int_pk = Annotated[
+    int, mapped_column(primary_key=True, unique=True, autoincrement=False, type_=BigInteger, index=True)
+]
 created_at = Annotated[datetime.datetime, mapped_column(server_default=text("TIMEZONE('utc+3', now())"))]
+updated_at = Annotated[
+    datetime.datetime,
+    mapped_column(server_default=text("TIMEZONE('utc+3', now())"), onupdate=text("TIMEZONE('utc+3', now())")),
+]
 
 
 class Base(DeclarativeBase):
@@ -21,3 +27,11 @@ class Base(DeclarativeBase):
             if col in self.repr_cols or idx < self.repr_cols_num
         ]
         return f"<{self.__class__.__name__} {', '.join(cols)}>"
+
+
+user_journal_association = Table(
+    "student_journal",
+    Base.metadata,
+    Column("user_id", ForeignKey("users.id"), primary_key=True),
+    Column("journal_id", ForeignKey("journals.id"), primary_key=True),
+)

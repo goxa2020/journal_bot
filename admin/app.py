@@ -17,7 +17,7 @@ from sqlalchemy import inspect
 from wtforms import PasswordField
 
 from admin.views.users import UserView as AppUserView
-from bot.database.models import UserModel as AppUserModel
+from bot.database.models import User as AppUserModel
 
 if TYPE_CHECKING:
     from werkzeug.wrappers.response import Response
@@ -207,6 +207,7 @@ admin.add_view(
 def security_context_processor() -> dict[str, Any]:
     return {
         "admin_view": admin.index_view,
+        "admin_base_template": "admin/base.html",
         "h": helpers,
         "get_url": url_for,
     }

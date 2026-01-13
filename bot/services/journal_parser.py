@@ -130,7 +130,7 @@ class JournalParser:
 
     async def parse_grades(self, username: str, password: str) -> list[dict[str, Any]]:  # noqa: C901, PLR0915
         """
-        Парсит оценки: list[{'subject': {'code': str, 'name': str, 'teacher': str},
+        Парсит оценки: list[{'journal': {'code': str, 'name': str, 'teacher': str},
                              'grades': [{'date': str (iso), 'value': str, 'type': str, 'comment': str}]}]
         """
         timeout = aiohttp.ClientTimeout(total=60)
@@ -236,7 +236,7 @@ class JournalParser:
                     if grades:
                         parsed_data.append(
                             {
-                                "subject": {
+                                "journal": {
                                     "code": str(journal_id),
                                     "name": discipline,
                                     "teacher": teacher_name,

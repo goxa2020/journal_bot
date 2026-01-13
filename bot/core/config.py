@@ -78,12 +78,27 @@ class CacheSettings(EnvBaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
 
 
-class Settings(BotSettings, DBSettings, CacheSettings):
+class CelerySettings(EnvBaseSettings):
+    CELERY_BROKER_URL: str = "redis://redis:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
+    CELERY_TIMEZONE: str = "Europe/Moscow"
+    CELERY_TASK_SERIALIZER: str = "json"
+    CELERY_RESULT_SERIALIZER: str = "json"
+    CELERY_ACCEPT_CONTENT: list[str] = ["json"]
+    CELERY_TASK_TIME_LIMIT: int = 300
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 250
+    CELERY_WORKER_PREFETCH_MULTIPLIER: int = 1
+    CELERY_WORKER_MAX_TASKS_PER_CHILD: int = 1000
+    CELERY_WORKER_CONCURRENCY: int = 4
+
+
+class Settings(BotSettings, DBSettings, CacheSettings, CelerySettings):
     DEBUG: bool = False
 
     SENTRY_DSN: str | None = None
 
-    AMPLITUDE_API_KEY: str  # or for example it could be POSTHOG_API_KEY
+    AMPLITUDE_API_KEY: str | None = None
+    POSTHOG_API_KEY: str | None = None
 
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
 

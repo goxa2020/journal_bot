@@ -14,6 +14,8 @@ from bot.database.models import Base
 config = context.config
 
 config.set_main_option("sqlalchemy.url", str(settings.database_url))
+# url = 'postgresql+asyncpg://tgbot:OGU6P2TNUEwxekD0OHe7@localhost:5432/bot_db'
+# config.set_main_option("sqlalchemy.url", url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

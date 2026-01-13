@@ -1,16 +1,27 @@
 from __future__ import annotations
-import datetime
+from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, text
+from sqlalchemy import BigInteger, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from bot.database.models.base import Base
+from bot.database.models.base import Base, created_at
 
 if TYPE_CHECKING:
-    import datetime
+    from .user import User
 
-    from .user import UserModel
+
+class SyncType(Enum):
+    MANUAL = "manual"
+    AUTO = "auto"
+    WATCH_MODE = "watch_mode"
+
+
+class SyncStatus(Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    IN_PROGRESS = "in_progress"
+    CANCELLED = "cancelled"
 
 
 class SyncLog(Base):
@@ -18,12 +29,12 @@ class SyncLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
-    timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, server_default=text("TIMEZONE('utc+3', now())")
-    )
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # success/error
-    error_msg: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    grades_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    sync_type: Mapped[SyncType] = mapped_column(nullable=False)
+    status: Mapped[SyncStatus] = mapped_column(String(15), nullable=False)
+    new_grades_count: Mapped[int] = mapped_column(nullable=True)
+    updated_grades_count: Mapped[int] = mapped_column(nullable=True)
+    message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[created_at] = mapped_column()
 
     # Relationships
-    user: Mapped[UserModel] = relationship(back_populates="sync_logs")
+    user: Mapped[User] = relationship(back_populates="sync_logs")

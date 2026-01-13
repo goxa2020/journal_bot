@@ -4,44 +4,39 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.database.models import Subject
+from bot.database.models import Journal
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class SubjectsService:
-    """Сервис для работы с предметами (Subjects)."""
+class JournalsService:
+    """Сервис для работы с журналами (journals)."""
 
     @classmethod
     async def create(
         cls,
         session: AsyncSession,
-        user_id: int,
+        journal_id: int,
         name: str,
-        code: str,
-        teacher: str,
-    ) -> Subject:
+        teacher_name: str,
+        lesson_type: str,
+    ) -> Journal:
         """Создать новый предмет."""
-        subject = Subject(
-            user_id=user_id,
-            name=name,
-            code=code,
-            teacher=teacher,
-        )
-        session.add(subject)
+        journal = Journal(id=journal_id, name=name, teacher_name=teacher_name, type=lesson_type)
+        session.add(journal)
         await session.commit()
-        await session.refresh(subject)
-        return subject
+        await session.refresh(journal)
+        return journal
 
     @classmethod
     async def get_by_user(
         cls,
         session: AsyncSession,
         user_id: int,
-    ) -> list[Subject]:
+    ) -> list[Journal]:
         """Получить все предметы пользователя."""
-        query = select(Subject).filter_by(user_id=user_id)
+        query = select(Journal).filter_by(user_id=user_id)
         result = await session.execute(query)
         return list(result.scalars().all())
 
@@ -51,9 +46,9 @@ class SubjectsService:
         session: AsyncSession,
         user_id: int,
         code: str,
-    ) -> Subject | None:
+    ) -> Journal | None:
         """Получить предмет по коду для пользователя."""
-        query = select(Subject).filter_by(user_id=user_id, code=code)
+        query = select(Journal).filter_by(user_id=user_id, code=code)
         result = await session.execute(query)
         return result.scalar_one_or_none()
 
@@ -61,7 +56,7 @@ class SubjectsService:
     async def update(
         cls,
         session: AsyncSession,
-        subject_id: int,
+        journal_id: int,
         name: str | None = None,
         code: str | None = None,
         teacher: str | None = None,
@@ -74,7 +69,7 @@ class SubjectsService:
         }
         if not updates:
             return
-        stmt = update(Subject).where(Subject.id == subject_id).values(**updates)
+        stmt = update(Journal).where(Journal.id == journal_id).values(**updates)
         await session.execute(stmt)
         await session.commit()
 
@@ -82,9 +77,9 @@ class SubjectsService:
     async def delete(
         cls,
         session: AsyncSession,
-        subject_id: int,
+        journal_id: int,
     ) -> None:
         """Удалить предмет."""
-        stmt = delete(Subject).where(Subject.id == subject_id)
+        stmt = delete(Journal).where(Journal.id == journal_id)
         await session.execute(stmt)
         await session.commit()
