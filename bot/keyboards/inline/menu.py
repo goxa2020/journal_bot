@@ -6,20 +6,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.services.users import is_authorized
 
 
-async def get_main_menu(session: AsyncSession, user_id: int) -> InlineKeyboardMarkup:
+async def get_main_menu_keyboard(session: AsyncSession, user_id: int) -> InlineKeyboardMarkup:
     """Главное меню с проверкой авторизации."""
     builder = InlineKeyboardBuilder()
-
-    builder.button(text=_("info button"), callback_data="info")
 
     authorized = await is_authorized(session, user_id)
 
     if authorized:
-        builder.button(text=_("sync_btn"), callback_data="sync")
-        builder.button(text=_("stats_btn"), callback_data="stats")
-    else:
-        builder.button(text=_("auth.menu_btn"), callback_data="auth_start")
+        builder.button(text=_("menu.grades_btn"), callback_data="grades")
+        builder.button(text=_("menu.stats_btn"), callback_data="stats")
 
-    builder.adjust(1, repeat=True)
+        builder.button(text=_("menu.watch_btn"), callback_data="watch")
+        builder.button(text=_("menu.settings_btn"), callback_data="settings")
+
+        builder.button(text=_("menu.export_btn"), callback_data="export")
+        builder.button(text=_("menu.help_btn"), callback_data="help")
+
+        builder.button(text=_("menu.update_btn"), callback_data="update")
+    else:
+        builder.button(text=_("menu.auth_btn"), callback_data="auth_start")
+        builder.button(text=_("menu.help_btn"), callback_data="help")
+
+    builder.adjust(2, repeat=True)
 
     return builder.as_markup()

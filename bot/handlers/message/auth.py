@@ -1,6 +1,6 @@
 from __future__ import annotations
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aiogram import Router
 from aiogram.filters import Command, StateFilter
@@ -8,9 +8,12 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.utils.i18n import gettext as _
 
-from bot.keyboards.inline.menu import get_main_menu
+from bot.keyboards.inline.menu import get_main_menu_keyboard
 from bot.keyboards.reply import get_cancel_keyboard
-from bot.services.users import set_edu_credentials
+from bot.services.api_client import get_auth_data
+from bot.services.auth import authenticate_user
+from bot.services.users import set_edu_credentials, set_user_data
+from bot.utils.main_menu import get_main_menu
 
 if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
@@ -36,8 +39,9 @@ async def cancel_handler(
 
     await state.clear()
     await message.answer(_("cancelled"), reply_markup=ReplyKeyboardRemove())
-    kb = await get_main_menu(session, message.from_user.id)
-    await message.answer(_("title main keyboard"), reply_markup=kb)
+    kb = await get_main_menu_keyboard(session, message.from_user.id)
+    text = await get_main_menu(session, message.from_user.id)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(StateFilter(FormAuth.login))
@@ -95,9 +99,35 @@ async def process_password(
     data = await state.get_data()
     login = data["login"]
 
+    access_token = await authenticate_user(login, password)
+
+    if not access_token:
+        await message.answer(
+            _("auth.failed"),
+            reply_markup=get_cancel_keyboard(),
+        )
+
+        await state.set_state(FormAuth.login)
+        return
+
+    await message.answer(_("auth.success"), reply_markup=ReplyKeyboardRemove())
+
     await set_edu_credentials(session, message.from_user.id, login, password)
 
+    auth_data = await get_auth_data(access_token)
+    user_data: dict[str, Any] = auth_data.get("user")
+
+    await set_user_data(
+        session=session,
+        user_id=message.from_user.id,
+        edu_user_id=user_data.get("userID"),
+        group_id=user_data.get("groupID"),
+        group_name=user_data.get("group"),
+        full_name=user_data.get("fio"),
+        is_authenticated=True,
+    )
+
     await state.clear()
-    await message.answer(_("auth.success"), reply_markup=ReplyKeyboardRemove())
-    kb = await get_main_menu(session, message.from_user.id)
-    await message.answer(_("title main keyboard"), reply_markup=kb)
+    kb = await get_main_menu_keyboard(session, message.from_user.id)
+    text = await get_main_menu(session, message.from_user.id)
+    await message.answer(text, reply_markup=kb)

@@ -75,6 +75,33 @@ async def set_language_code(
 
     await session.execute(stmt)
     await session.commit()
+    await clear_cache(get_language_code, user_id)
+
+
+async def set_user_data(  # noqa: PLR0913
+    session: AsyncSession,
+    user_id: int,
+    edu_user_id: str | None = None,
+    group_id: int | None = None,
+    group_name: str | None = None,
+    full_name: str | None = None,
+    is_authenticated: bool | None = None,
+) -> None:
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .values(
+            edu_user_id=edu_user_id,
+            group_id=group_id,
+            group_name=group_name,
+            full_name=full_name,
+            is_authenticated=is_authenticated,
+        )
+    )
+
+    await session.execute(stmt)
+    await session.commit()
+    await clear_cache(is_authorized, user_id)
 
 
 @cached(key_builder=lambda session, user_id: build_key(user_id))
@@ -142,7 +169,7 @@ async def get_edu_credentials(session: AsyncSession, user_id: int) -> tuple[str 
         username = fernet.decrypt(row[0].encode()).decode()
         password = fernet.decrypt(row[1].encode()).decode()
     except InvalidToken:
-        logger.debug("Failed to decrypt edu credentials for user_id=%d", user_id)
+        logger.warning("Failed to decrypt edu credentials for user_id=%d", user_id)
     return username, password
 
 
@@ -163,9 +190,13 @@ async def set_edu_credentials(session: AsyncSession, user_id: int, username: str
 
 
 async def is_authorized(session: AsyncSession, user_id: int) -> bool:
-    """Проверить, авторизован ли пользователь (имеет edu credentials)."""
-    username, _ = await get_edu_credentials(session, user_id)
-    return username is not None
+    """Проверить, авторизован ли пользователь."""
+    query = select(User.is_authenticated).filter_by(id=user_id)
+
+    result = await session.execute(query)
+
+    is_authenticated = result.scalar_one_or_none()
+    return bool(is_authenticated)
 
 
 async def update_last_sync(session: AsyncSession, user_id: int, timestamp: datetime) -> None:

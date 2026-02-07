@@ -15,6 +15,12 @@ LOCALES_DIR = f"{BOT_DIR}/locales"
 I18N_DOMAIN = "messages"
 DEFAULT_LOCALE = "ru"
 
+BASE_URL = "https://edu-tpi.donstu.ru"
+AUTH_URL = f"{BASE_URL}/api/tokenauth"
+FP_URL = f"{BASE_URL}/api/UserInfo/Devices/RandomIdentity"
+JOURNALS_URL = f"{BASE_URL}/api/Journals/JournalList"
+JOURNAL_URL = f"{BASE_URL}/api/Journals/Journal"
+
 
 class EnvBaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

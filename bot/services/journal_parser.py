@@ -214,14 +214,13 @@ class JournalParser:
 
                     info = data.get("journalInfo", {})
                     discipline = (info.get("dis") or j.get("dis") or "").strip()
-                    (info.get("type") or j.get("type") or "").strip()
                     teacher_name = (info.get("teacherName") or j.get("prepodName") or "").strip()
 
                     if not discipline:
                         continue
 
                     # Парсинг уроков (первый студент)
-                    lessons = self.get_student_lessons_last_days_from_journal(journal_json, days=730)
+                    lessons = self.get_student_lessons_last_days_from_journal(journal_json)
 
                     grades = [
                         {

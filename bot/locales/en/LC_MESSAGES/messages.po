@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2025-11-29 16:58+0300\n"
+"POT-Creation-Date: 2026-02-08 01:49+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -26,34 +26,33 @@ msgstr "📧 Enter edu email (login):"
 msgid "info button"
 msgstr "Info"
 
-#: bot/handlers/message/auth.py:28 bot/keyboards/reply/__init__.py:9
+#: bot/handlers/message/auth.py:31 bot/keyboards/reply/__init__.py:9
 msgid "cancel_btn"
 msgstr "❌ Cancel"
 
-#: bot/handlers/message/auth.py:38
+#: bot/handlers/message/auth.py:41
 msgid "cancelled"
 msgstr "❌ Action cancelled."
 
-#: bot/handlers/message/auth.py:40 bot/handlers/message/auth.py:103
-#: bot/handlers/message/menu.py:19
-msgid "title main keyboard"
-msgstr "📒 <b>Menu</b>."
-
-#: bot/handlers/message/auth.py:50 bot/handlers/message/auth.py:58
+#: bot/handlers/message/auth.py:53 bot/handlers/message/auth.py:61
 msgid "auth.enter_login_invalid"
 msgstr "❌ Invalid email format. Try again:"
 
-#: bot/handlers/message/auth.py:65
+#: bot/handlers/message/auth.py:68
 msgid "auth.enter_pass"
 msgstr "🔑 Enter edu password:"
 
-#: bot/handlers/message/auth.py:82 bot/handlers/message/auth.py:90
+#: bot/handlers/message/auth.py:85 bot/handlers/message/auth.py:93
 msgid "auth.enter_pass_invalid"
 msgstr "❌ Password cannot be empty. Try again:"
 
-#: bot/handlers/message/auth.py:101
+#: bot/handlers/message/auth.py:105
+msgid "auth.failed"
+msgstr "❌ Authorization failed. Try again:"
+
+#: bot/handlers/message/auth.py:111
 msgid "auth.success"
-msgstr "✅ Authorization successfully!"
+msgstr "✅ Authorization successfully! Sinchronization started..."
 
 #: bot/handlers/message/export_users.py:29
 #, fuzzy
@@ -87,6 +86,14 @@ msgstr ""
 "\n"
 "To start using the bot you can start with /menu"
 
+#: bot/handlers/message/start.py:38 bot/utils/main_menu.py:16
+msgid "last_grade"
+msgstr ""
+
+#: bot/handlers/message/start.py:38 bot/utils/main_menu.py:16
+msgid "last_grade.none"
+msgstr ""
+
 #: bot/handlers/message/support.py:13
 msgid "support text"
 msgstr "🤝 Support"
@@ -100,16 +107,41 @@ msgid "back button"
 msgstr "🔙 Back"
 
 #: bot/keyboards/inline/menu.py:18
-msgid "sync_btn"
-msgstr "🔄 Sync"
+msgid "menu.grades_btn"
+msgstr ""
 
 #: bot/keyboards/inline/menu.py:19
-msgid "stats_btn"
+#, fuzzy
+msgid "menu.stats_btn"
 msgstr "📊 Stats"
 
 #: bot/keyboards/inline/menu.py:21
-msgid "auth.menu_btn"
+#, fuzzy
+msgid "menu.watch_btn"
+msgstr "📒 <b>Menu</b>."
+
+#: bot/keyboards/inline/menu.py:22
+#, fuzzy
+msgid "menu.settings_btn"
+msgstr "📊 Stats"
+
+#: bot/keyboards/inline/menu.py:24
+msgid "menu.export_btn"
+msgstr ""
+
+#: bot/keyboards/inline/menu.py:25 bot/keyboards/inline/menu.py:30
+#, fuzzy
+msgid "menu.help_btn"
 msgstr "🔐 Authorize"
+
+#: bot/keyboards/inline/menu.py:27
+msgid "menu.update_btn"
+msgstr ""
+
+#: bot/keyboards/inline/menu.py:29
+#, fuzzy
+msgid "menu.auth_btn"
+msgstr "📒 <b>Menu</b>."
 
 #~ msgid "wallet button"
 #~ msgstr "👛 Wallet"
@@ -119,3 +151,9 @@ msgstr "🔐 Authorize"
 
 #~ msgid "welcome_back_5"
 #~ msgstr ""
+
+#~ msgid "sync_btn"
+#~ msgstr "🔄 Sync"
+
+#~ msgid "menu.main"
+#~ msgstr "📒 <b>Menu</b>."

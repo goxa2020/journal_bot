@@ -190,10 +190,12 @@ services:
       - "--collector.filesystem.mount-points-exclude"
       - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9100/metrics || exit 1"]
-      interval: 20s
-      timeout: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+      start_period: 15s
+
 
   prometheus:
     image: prom/prometheus:v2.43.0
