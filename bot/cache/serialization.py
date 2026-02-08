@@ -31,7 +31,7 @@ class JSONSerializer(AbstractSerializer):
     """Serialize values using JSON."""
 
     def serialize(self, obj: Any) -> bytes:
-        return orjson.dumps(obj)  # type: ignore[no-any-return]
+        return orjson.dumps(obj)
 
     def deserialize(self, obj: str) -> Any:
         """Deserialize values using JSON."""
