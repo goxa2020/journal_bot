@@ -115,7 +115,12 @@ async def process_password(
     await set_edu_credentials(session, message.from_user.id, login, password)
 
     auth_data = await get_auth_data(access_token)
-    user_data: dict[str, Any] = auth_data.get("user")
+    user_data_raw = auth_data.get("user")
+    if user_data_raw is None:
+        await message.answer(_("auth.failed"), reply_markup=ReplyKeyboardRemove())
+        await state.set_state(FormAuth.login)
+        return
+    user_data: dict[str, Any] = user_data_raw
 
     await set_user_data(
         session=session,
