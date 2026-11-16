@@ -36,7 +36,7 @@ bot = [
     "prometheus-client>=0.26.0,<1.0.0",
 ]
 admin = [
-    "gunicorn>=26.0.0,<27.0.0",
+    "gunicorn>=26.0.0,<28.0.0",
     "flask>=3.1.0,<4.0.0",
     "flask-admin>=2.2.0,<3.0.0",
     "flask-security-too>=5.8.2,<6.0.0",
