@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +15,10 @@ BOT_DIR = Path(__file__).absolute().parent.parent
 LOCALES_DIR = f"{BOT_DIR}/locales"
 I18N_DOMAIN = "messages"
 DEFAULT_LOCALE = "ru"
+TIMEZONE = ZoneInfo("Europe/Moscow")
+
+# Какой env-файл читать. Для локального запуска: ENV_FILE=.env.local
+ENV_FILE = os.getenv("ENV_FILE", ".env")
 
 BASE_URL = "https://edu-tpi.donstu.ru"
 AUTH_URL = f"{BASE_URL}/api/tokenauth"
@@ -23,7 +28,7 @@ JOURNAL_URL = f"{BASE_URL}/api/Journals/Journal"
 
 
 class EnvBaseSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
 
 class WebhookSettings(EnvBaseSettings):
@@ -45,6 +50,9 @@ class BotSettings(WebhookSettings):
     BOT_TOKEN: str
     SUPPORT_URL: str | None = None
     RATE_LIMIT: int | float = 0.5  # for throttling control
+    # Прокси для Telegram Bot API. Нужен, когда VPN работает только на хосте
+    # (Docker в него не ходит). В Docker Desktop: http://host.docker.internal:10809
+    TELEGRAM_PROXY: str | None = None
 
 
 class DBSettings(EnvBaseSettings):
@@ -86,7 +94,7 @@ class CacheSettings(EnvBaseSettings):
 
 class CelerySettings(EnvBaseSettings):
     CELERY_BROKER_URL: str = "redis://redis:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
     CELERY_TIMEZONE: str = "Europe/Moscow"
     CELERY_TASK_SERIALIZER: str = "json"
     CELERY_RESULT_SERIALIZER: str = "json"

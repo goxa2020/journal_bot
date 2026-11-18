@@ -1,5 +1,6 @@
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import DefaultKeyBuilder
 from aiogram.fsm.storage.redis import RedisStorage
@@ -13,7 +14,14 @@ app = web.Application()
 
 token = settings.BOT_TOKEN
 
-bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+# Если задан TELEGRAM_PROXY, все запросы к Bot API идут через прокси хоста.
+bot_session = AiohttpSession(proxy=settings.TELEGRAM_PROXY) if settings.TELEGRAM_PROXY else None
+
+bot = Bot(
+    token=token,
+    session=bot_session,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 
 redis_client = Redis(
     connection_pool=ConnectionPool(

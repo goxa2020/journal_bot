@@ -13,6 +13,14 @@ help:
 deps:
     @uv sync --frozen
 
+# Перезапуск кода в контейнере без пересборки (правки ./bot)
+watch:
+    docker compose watch
+
+# Быстрый локальный запуск с автоперезапуском (нужен .env.local, см. docs/DEVELOPMENT.md)
+dev:
+    $env:ENV_FILE = ".env.local"; uv run watchfiles --filter python "python -m bot" bot
+
 # Run docker compose
 compose-up:
     docker compose up --build -d
