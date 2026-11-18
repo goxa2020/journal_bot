@@ -79,9 +79,9 @@ format:
     @uv run ruff check --fix .
     @uv run ruff format .
 
-# Run pre-commit on all files
+# Run pre-commit on all files (кэш и TEMP — в проекте: песочница не даёт писать в ~/.cache)
 pre:
-    @uv run pre-commit run --all-files
+    @$env:PRE_COMMIT_HOME = "$PWD/.pre-commit-cache"; $env:TEMP = "$PWD/.pre-commit-cache/tmp"; $env:TMP = "$PWD/.pre-commit-cache/tmp"; New-Item -ItemType Directory -Force "$PWD/.pre-commit-cache/tmp" | Out-Null; uv run pre-commit run --all-files
 
 # Run mypy check on bot/
 mypy:

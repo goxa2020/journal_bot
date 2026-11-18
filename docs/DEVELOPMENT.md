@@ -178,6 +178,21 @@ uv run mypy bot/
 uv run pytest -q                      # заработает после задачи 0.7
 ```
 
+### pre-commit и кэши
+
+`just pre` держит кэш pre-commit и `TEMP` внутри проекта (`.pre-commit-cache/`), потому что
+python из `.venv` в песочнице DSH (и при некоторых политиках машины) не может писать
+в `C:\Users\<user>\.cache` — иначе pre-commit падает с `attempt to write a readonly database`.
+
+Git-хуки подключены на [.githooks/pre-commit](../.githooks/pre-commit)
+(`git config --local core.hooksPath .githooks`): обёртка выставляет те же переменные, поэтому
+обычный `git commit` работает. Если раньше делали `pre-commit install`, путь `.git/hooks/`
+перекрывает этот — вернуть `git config --local core.hooksPath .githooks`.
+Каталог кэша в репозиторий не попадает (он в `.gitignore`).
+
+`ruff` больше не пишет кэш в `/tmp` (на Windows это `C:\tmp` и отказ доступа) — используется
+`.ruff_cache` в проекте.
+
 ## 5. Миграции
 
 ```bash

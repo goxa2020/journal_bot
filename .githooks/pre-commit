@@ -1,0 +1,18 @@
+#!/bin/sh
+# Хук pre-commit для этого репозитория.
+#
+# Кэш и TEMP держим внутри проекта: python из .venv может не иметь права
+# писать в C:\Users\<user>\.cache (ограничение песочницы DSH / политик машины),
+# из-за чего pre-commit падал с "attempt to write a readonly database".
+#
+# Подключается один раз: git config --local core.hooksPath .githooks
+ROOT="$(git rev-parse --show-toplevel)"
+
+PRE_COMMIT_HOME="$ROOT/.pre-commit-cache"
+export PRE_COMMIT_HOME
+
+mkdir -p "$PRE_COMMIT_HOME/tmp"
+export TEMP="$PRE_COMMIT_HOME/tmp"
+export TMP="$PRE_COMMIT_HOME/tmp"
+
+exec "$ROOT/.venv/Scripts/python.exe" -m pre_commit run --hook-stage pre-commit "$@"

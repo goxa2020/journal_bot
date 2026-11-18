@@ -159,4 +159,3 @@ msgstr "Оценки не найдены"
 
 #~ msgid "auth.enter_pass"
 #~ msgstr "🔑 Введите edu пароль:"
-

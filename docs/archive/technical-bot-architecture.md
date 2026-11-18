@@ -1,7 +1,7 @@
 # Архитектура Telegram-бота для электронного журнала
 
-**Версия:** 4.0  
-**Дата:** 30.11.2025  
+**Версия:** 4.0
+**Дата:** 30.11.2025
 
 ---
 
@@ -326,7 +326,7 @@ Base URL: https://edu-tpi.donstu.ru/api
 - `notification_enabled` - включены ли уведомления
 - `morning_notification_enabled` - откладывать ночные уведомления до утра (default: true)
 - `morning_notification_time` - time время начала утра для уведомлений (default: 08:00)
-- `watch_mode_expires_at` - timestamp окончания режима ожидания оценок (NULL = выключен) 
+- `watch_mode_expires_at` - timestamp окончания режима ожидания оценок (NULL = выключен)
 - `watch_mode_last_sync_at` - timestamp последней синхронизации в режиме ожидания
 - `created_at`, `updated_at` - timestamps
 
@@ -470,20 +470,20 @@ Base URL: https://edu-tpi.donstu.ru/api
 ```
 
 
-#### Накопленные ночные уведомления (TTL: 12 часов) 
+#### Накопленные ночные уведомления (TTL: 12 часов)
 **Для режима "Откладывать до утра":**
 
 ```
-Ключ: notifications:night:{user_id}  
-Значение: [  
-	{  
-		"subject_id": 12345,  
-		"subject_name": "Программирование",  
-		"date": "2024-10-30",  
-		"grade_value": "10",  
-		"timestamp": 1701234567  
-	},  
-	...  
+Ключ: notifications:night:{user_id}
+Значение: [
+	{
+		"subject_id": 12345,
+		"subject_name": "Программирование",
+		"date": "2024-10-30",
+		"grade_value": "10",
+		"timestamp": 1701234567
+	},
+	...
 ]
 ```
 
@@ -686,7 +686,7 @@ Base URL: https://edu-tpi.donstu.ru/api
 **Ключевые операции:**
 
 **4.1 Уведомление о новых оценках**
-- Проверка настроек пользователя 
+- Проверка настроек пользователя
 - Проверка текущего времени (22:00 - 08:00 = ночь)
 - Если ночь и `morning_notification_enabled = true`:
     - Вычисление времени до `morning_notification_time`
@@ -731,7 +731,7 @@ Base URL: https://edu-tpi.donstu.ru/api
 **5.3 Месячные дайджесты** (31 число, 12:00)
 - Отправка задачи `send_monthly_digests_task.delay()` в Celery
 
-**5.4 Проверка режима ожидания** (каждый час) 
+**5.4 Проверка режима ожидания** (каждый час)
 - Отправка задачи `cleanup_expired_watch_mode_task.delay()` в Celery - Удаление истекших записей режима ожидания из БД
 
 **5.5 Очистка старых логов синхронизаций** (каждые 2 дня, 3:00)
@@ -768,19 +768,19 @@ Base URL: https://edu-tpi.donstu.ru/api
 #### Средний приоритет (priority=5):
 
 **`sync_watch_mode_users_task()`**
-- Получение списка пользователей в режиме ожидания из БД (where `watch_mode_expires_at` > now()) 
-- Синхронизация каждого через `GradeSyncService.sync_user_grades()` 
-- Отправка уведомлений при новых оценках 
-- Группировка ночных уведомлений (если включен режим "Откладывать до утра") 
+- Получение списка пользователей в режиме ожидания из БД (where `watch_mode_expires_at` > now())
+- Синхронизация каждого через `GradeSyncService.sync_user_grades()`
+- Отправка уведомлений при новых оценках
+- Группировка ночных уведомлений (если включен режим "Откладывать до утра")
 - Обновление `watch_mode_last_sync_at` для предотвращения спама
 
 **`send_delayed_notification_task(user_id, grade_data)`**
 - Отложенное уведомление о новой оценке
-- Отправляется с eta=morning_time (абсолютное время) 
-- Отправка задачи `send_night_accumulated_notifications_task` в Celery 
-- Получение всех накопленных ночных уведомлений из Redis 
-- Группировка по пользователям 
-- Отправка одного сообщения со всеми оценками за ночь 
+- Отправляется с eta=morning_time (абсолютное время)
+- Отправка задачи `send_night_accumulated_notifications_task` в Celery
+- Получение всех накопленных ночных уведомлений из Redis
+- Группировка по пользователям
+- Отправка одного сообщения со всеми оценками за ночь
 - Очистка очереди в Redis
 
 #### Низкий приоритет (priority=1):
@@ -1156,7 +1156,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
     "📊 Синхронизация завершена. Найдено N оценок по M предметам"
 ```
 
-**Результат:** 
+**Результат:**
 - Бот отвечает мгновенно (< 100ms)
 - Пользователь авторизован
 - Синхронизация выполняется в фоне
@@ -1198,7 +1198,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
     (ВЕСЬ ПРОЦЕСС < 100ms)
 ```
 
-**Результат:** 
+**Результат:**
 - Мгновенный ответ (данные из БД)
 - Пользователь получает агрегированный вывод по ВСЕМ журналам сразу
 - Нет блокировки, нет тяжёлых операций
@@ -1242,14 +1242,14 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
 11. Получен список всех журналов пользователя
    ↓
 12. Для каждого журнала:
-    
+
     12.1. GradeSyncService проверяет кеш:
           journal:{group_id}:{journal_id}:full
-    
+
     12.2. Если кеш есть и студент найден:
           → Извлечение оценок из кеша
           → Переход к шагу 13
-    
+
     12.3. Если кеша нет или студент не найден:
           → JournalParser.fetch_journal_details(token, journal_id)
           → Получение journalData (все студенты), journalDates, journalVal
@@ -1266,10 +1266,10 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
 16. GradeSyncService → Database.save_grades(new_grades)
    ↓
 17. Для каждой новой оценки из журнала:
-    
+
     17.1. Проверка: зарегистрирован ли студент в боте?
           → Database.get_user_by_edu_id(student_id)
-    
+
     17.2. Если ДА:
           → Database.save_grades(student_grades)
           → NotificationService.notify_new_grades(student_user_id, grades)
@@ -1315,30 +1315,30 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
 6. Группировка пользователей по group_id
    ↓
 7. Для каждой группы:
-   
+
    7.1. Получение списка всех пользователей группы
         users_in_group = [user1, user2, ..., userN]
-   
+
    7.2. Получение токена первого пользователя группы
         → AuthService.get_access_token(any_user_from_group)
-   
+
    7.3. Запрос списка журналов
         → JournalParser.fetch_journals_list(token)
-   
+
    7.4. Для каждого журнала:
-        
+
         7.4.1. Инициализация множества необработанных студентов
                unprocessed_students = {edu_user_id всех users_in_group}
-        
+
         7.4.2. Проверка кеша для всей группы
                cache_key = "journal:{group_id}:{journal_id}:full"
-               
+
                Если кеш найден и студенты присутствуют:
                → Обработка студентов из кеша
                → Удаление обработанных из unprocessed_students
-        
+
         7.4.3. Пока unprocessed_students не пусто:
-               
+
                a) Выбор первого необработанного студента
                b) Получение токена этого студента
                c) Запрос журнала
@@ -1353,7 +1353,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
                   → Отправка уведомлений при наличии новых оценок
                   → Удаление обработанных из unprocessed_students
                h) Переход к шагу a) если unprocessed_students не пусто
-        
+
         7.4.4. Запись логов синхронизации журнала
 			   ↓
 1. Сбор общей статистики:
@@ -1401,7 +1401,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
 5. NotificationService → Database.get_users_with_digests_enabled()
    ↓
 6. Для каждого пользователя:
-   
+
    6.1. StatisticsService.generate_monthly_report(user_id)
         ↓
    6.2. Database.get_grades_for_last_month(user_id)
@@ -1429,7 +1429,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
         [Детальная статистика] [Экспорт Excel]
 ```
 
-**Результат:** 
+**Результат:**
 - Бот остаётся отзывчивым
 - Все пользователи получают месячную сводку с анализом
 - Дайджесты отправляются в фоне
@@ -1465,7 +1465,7 @@ celery_tasks_retrying_total{task="sync_user_manual_task"} 5
     "📝 Новая оценка: [Предмет] - [Значение] (средний балл: X.X)"
 ```
 
-**Результат:** 
+**Результат:**
 - Уведомления не беспокоят ночью (22:00 - 08:00)
 - Все ночные уведомления приходят утром в настроенное время
 - Дневные уведомления приходят сразу
@@ -1515,14 +1515,14 @@ API edu-tpi возвращает в `journalData` **не всю группу**, 
 Функция: get_journal_with_subgroup_support(group_id, journal_id, student_id)
 
 1. Проверить кеш: journal:{group_id}:{journal_id}:full
-   
+
 2. Если кеш найден:
    2.1. Проверить: student_id в cached.student_ids?
    2.2. Если ДА → вернуть cached.grades[student_id]
    2.3. Если НЕТ → перейти к шагу 3
 
 3. Запросить журнал через API
-   
+
 4. Распарсить оценки всех студентов из journalData
 
 5. Получить список student_ids из распарсенных данных
@@ -1703,7 +1703,7 @@ celery_worker_utilization_percent{worker="worker1"} 75
   - Очередь задач > 1000 → масштабировать workers
   - Все workers down → рестарт сервиса
   - Время ответа бота > 500ms → проверить нагрузку
-  
+
 - **Важные:**
   - Task failure rate > 5% → проверить логи
   - Worker down > 5 минут → автоматический рестарт
@@ -1784,6 +1784,6 @@ celery_worker_utilization_percent{worker="worker1"} 75
 
 ---
 
-**Документ подготовлен:** 30.11.2025  
-**Автор:** Георгий  
+**Документ подготовлен:** 30.11.2025
+**Автор:** Георгий
 **Контакты:** [github.com/goxa2020/journal_bot](https://github.com/goxa2020/journal_bot)

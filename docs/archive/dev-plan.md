@@ -248,16 +248,16 @@ def collect_metrics_task():
 class AuthService:
     async def get_fingerprint(token: str) -> str:
         """Получить fingerprint"""
-        
+
     async def authorize(username: str, password: str) -> AuthToken:
         """Авторизация пользователя"""
-        
+
     async def get_user_info(token: str) -> UserInfo:
         """Получить информацию о пользователе"""
-        
+
     async def validate_token(token: str) -> bool:
         """Проверить валидность токена"""
-        
+
     async def refresh_token_if_needed(user_id: int) -> str:
         """Обновить токен если нужно"""
 ```
@@ -397,7 +397,7 @@ def get_grades_keyboard(subjects: List[Subject]):
 async def callback_main_menu(query: CallbackQuery):
     message_text = get_main_menu_text()  # Получить текст главного меню
     keyboard = get_main_menu_keyboard()
-    
+
     # EDIT вместо новой отправки!
     await query.message.edit_text(
         text=message_text,
@@ -409,10 +409,10 @@ async def callback_main_menu(query: CallbackQuery):
 async def callback_subject(query: CallbackQuery):
     subject_id = int(query.data.split("_")[1])
     grades_list = await get_grades(user_id, subject_id)
-    
+
     text = format_subject_details(grades_list, subject_id)
     keyboard = get_subject_back_keyboard()
-    
+
     await query.message.edit_text(text, reply_markup=keyboard)
 
 # settings.py - включение уведомлений
@@ -439,7 +439,7 @@ async def callback_notifications_on(query: CallbackQuery):
 def format_grades_table(grades_dict: Dict) -> str:
     """
     Формирует монотекстовую таблицу оценок
-    
+
     grades_dict: {
         subject_id: {
             name: "Программирование",
@@ -453,7 +453,7 @@ def format_grades_table(grades_dict: Dict) -> str:
     # Ограничение по ширине (86 символов - стандарт Telegram)
     # Обрезание длинных названий с "..."
     # Выравнивание по столбцам
-    
+
     # Пример вывода:
     # ┌─────────────────────────────────────────────────────────────────────────────────┐
     # │ Предмет           │ 30.09 │ 10.10 │ 20.10 │ 30.10 │ Ср. │
@@ -462,7 +462,7 @@ def format_grades_table(grades_dict: Dict) -> str:
     # │ Математика        │   5   │   4   │   5   │   -   │ 4.7 │
     # │ Физика ...        │   -   │   7   │   8   │   6   │ 7.0 │
     # └─────────────────────────────────────────────────────────────────────────────────┘
-    
+
     return table_str
 ```
 
@@ -483,8 +483,8 @@ def format_grades_table(grades_dict: Dict) -> str:
 ```python
 class NotificationService:
     async def send_grade_notification(
-        user_id: int, 
-        subject: Subject, 
+        user_id: int,
+        subject: Subject,
         grade_value: str,
         is_night: bool = False
     ):
@@ -495,7 +495,7 @@ class NotificationService:
         #   - Отправить Celery task с eta=morning_time
         # Иначе:
         #   - Отправить сразу через Bot API
-        
+
     async def send_delayed_notification_batch(
         user_id: int,
         accumulated_grades: List[GradeNotification]
@@ -505,7 +505,7 @@ class NotificationService:
         # Сформировать сообщение со списком
         # Отправить через Bot API
         # Очистить Redis ключ
-        
+
     async def send_monthly_digest(
         user_id: int,
         report_data: dict
@@ -546,10 +546,10 @@ async def callback_watch_mode(query: CallbackQuery):
     # Установить в БД: watch_mode_expires_at = now() + 30 минут
     # Установить в Redis: watch_mode:{user_id} с TTL 30 мин
     # Ответ: "✅ Режим ожидания включён, осталось 30 мин"
-    
+
     # Celery task sync_watch_mode_users_task будет проверять каждые 5 минут
     # и отправлять уведомления о новых оценках
-    
+
 # Выключение режима ожидания
 @router.callback_query(F.data == "watch_mode_off")
 async def callback_watch_mode_off(query: CallbackQuery):
@@ -585,13 +585,13 @@ class ExportService:
         #   - "Статистика" - средние баллы по предметам
         # Форматирование (цвета, границы, выравнивание)
         # Возврат бинарного файла
-        
+
     async def export_to_pdf(user_id: int) -> bytes:
         """Экспортировать в PDF"""
         # Аналогично Excel
         # Использование reportlab или fpdf2
         # Добавление простых графиков
-        
+
     async def export_compact_text(user_id: int) -> str:
         """Компактный текст для Telegram"""
         # Минималистичная таблица
@@ -615,25 +615,25 @@ class ExportService:
 class StatisticsService:
     async def get_average_grade(user_id: int) -> float:
         """Средний балл по всем предметам"""
-        
+
     async def get_average_by_subject(user_id: int, subject_id: int) -> float:
         """Средний балл по конкретному предмету"""
-        
+
     async def get_attendance_stats(user_id: int) -> dict:
         """Статистика посещаемости"""
         # Процент посещённых занятий
         # Количество пропусков (Н) и уважительных (Б, У)
-        
+
     async def get_top_subjects(user_id: int, top_n: int = 3) -> List[Subject]:
         """Лучшие предметы по среднему баллу"""
-        
+
     async def get_attention_subjects(user_id: int) -> List[Subject]:
         """Предметы, требующие внимания (низкий балл)"""
-        
+
     async def get_grade_dynamics(user_id: int) -> dict:
         """Динамика оценок по неделям/месяцам"""
         # Возврат: {week/month: avg_grade}
-        
+
     async def get_monthly_report(user_id: int, year: int, month: int) -> dict:
         """Полный месячный отчёт"""
         # Средний балл, динамика по неделям
@@ -862,6 +862,6 @@ tests/
 
 ---
 
-**Документ подготовлен:** 13.12.2025  
-**Версия плана:** 1.0  
+**Документ подготовлен:** 13.12.2025
+**Версия плана:** 1.0
 **Статус:** Готов к разработке

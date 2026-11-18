@@ -138,3 +138,5 @@ examples/
 dev/
 .vscode/
 .env.local
+.pre-commit-cache/
+.ruff_cache/
