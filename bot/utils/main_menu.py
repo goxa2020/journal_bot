@@ -7,7 +7,7 @@ from bot.services.users import is_authorized
 
 async def get_main_menu(session: AsyncSession, user_id: int) -> str:
     """Возвращает главное меню с проверкой авторизации."""
-    authorized = is_authorized(session, user_id)
+    authorized = await is_authorized(session, user_id)
     if authorized:
         last_grade = await GradesService.get_recent(session, user_id, 1)
 
