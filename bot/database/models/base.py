@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime
+import datetime as dt
 from typing import Annotated
 
 from sqlalchemy import BigInteger, Column, ForeignKey, Table, text
@@ -9,9 +9,9 @@ int_pk = Annotated[int, mapped_column(primary_key=True, unique=True, autoincreme
 big_int_pk = Annotated[
     int, mapped_column(primary_key=True, unique=True, autoincrement=False, type_=BigInteger, index=True)
 ]
-created_at = Annotated[datetime.datetime, mapped_column(server_default=text("TIMEZONE('utc+3', now())"))]
+created_at = Annotated[dt.datetime, mapped_column(server_default=text("TIMEZONE('utc+3', now())"))]
 updated_at = Annotated[
-    datetime.datetime,
+    dt.datetime,
     mapped_column(server_default=text("TIMEZONE('utc+3', now())"), onupdate=text("TIMEZONE('utc+3', now())")),
 ]
 
