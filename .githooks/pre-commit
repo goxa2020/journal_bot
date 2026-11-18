@@ -15,4 +15,8 @@ mkdir -p "$PRE_COMMIT_HOME/tmp"
 export TEMP="$PRE_COMMIT_HOME/tmp"
 export TMP="$PRE_COMMIT_HOME/tmp"
 
+# ruff — из venv проекта, без uv: он не ходит в кэш вне рабочей папки
+"$ROOT/.venv/Scripts/ruff.exe" check --no-fix . || exit 1
+"$ROOT/.venv/Scripts/ruff.exe" format --check . || exit 1
+
 exec "$ROOT/.venv/Scripts/python.exe" -m pre_commit run --hook-stage pre-commit "$@"
