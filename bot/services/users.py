@@ -78,7 +78,7 @@ async def set_language_code(
     await clear_cache(get_language_code, user_id)
 
 
-async def set_user_data(  # noqa: PLR0913
+async def set_user_data(  # noqa: PLR0913, PLR0917
     session: AsyncSession,
     user_id: int,
     edu_user_id: str | None = None,

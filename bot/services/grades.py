@@ -17,7 +17,7 @@ class GradesService:
     """Сервис для работы с оценками (Grades)."""
 
     @classmethod
-    async def create(  # noqa: PLR0913
+    async def create(  # noqa: PLR0913, PLR0917
         cls,
         session: AsyncSession,
         grade_id: int,
