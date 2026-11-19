@@ -69,7 +69,7 @@ Celery 5 + Redis (фоновые задачи), gettext для локализа�
 
 **Админка:** Flask-Admin, Flask-Security, Flask-SQLAlchemy, gunicorn.
 
-**Инфраструктура:** Docker Compose, uv, just/make, pre-commit, GitHub Actions (ruff, mypy, CodeQL,
+**Инфраструктура:** Docker Compose (конфигурации dev и prod), uv, just/make, pre-commit, GitHub Actions (ruff, mypy, CodeQL,
 Hadolint, Dependabot), Prometheus + Grafana, бэкапы PostgreSQL.
 
 ## Быстрый старт
@@ -93,6 +93,11 @@ cp .env.example .env
 docker compose up -d --build
 docker compose logs -f bot
 ```
+
+Это конфигурация разработчика: порты, `compose watch` и живая админка. Прод-запуск на сервере —
+явная пара файлов, `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+(админка только на `127.0.0.1`, лимиты памяти, мониторинг за профилем). Отличия, деплой и
+обход блокировки Telegram — [deploy/README.md](deploy/README.md).
 
 Миграции применяются автоматически сервисом `migrator`. Воркер и beat поднимаются вместе со
 стеком. Админка — `http://localhost:${ADMIN_PORT}`, Prometheus — `:9090`, Grafana — `:3000`,

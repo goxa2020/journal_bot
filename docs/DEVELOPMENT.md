@@ -86,6 +86,36 @@ docker exec tgbot-bot python -c "import socket; s=socket.socket(); s.settimeout(
 Остальные переменные (`ADMIN_*`, `SENTRY_DSN`, `AMPLITUDE_API_KEY`, `PROMETHEUS_PORT`,
 `GRAFANA_*`, `CELERY_*`) — смотри [.env.example](../.env.example).
 
+### Две конфигурации compose: локально и на сервере
+
+`docker-compose.yml` — общая база: сервисы, образы, healthcheck'и, сети и тома. Портов на хост
+в ней нет намеренно: списки в override только дополняются, поэтому «отменить» публикацию
+наследованием из базового файла нельзя.
+
+| Файл | Где | Что добавляет |
+|---|---|---|
+| `docker-compose.override.yml` | локальная машина (подхватывается сам) | порты на хост, `docker compose watch`, bind-mount `./admin` |
+| `docker-compose.prod.yml` | сервер (указывается явно) | админка на `127.0.0.1`, лимиты памяти, мониторинг за профилем `monitoring` |
+
+```bash
+# локально — как раньше
+docker compose up -d --build
+
+# на сервере
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+На сервере `bot` и `worker` ходят в Telegram через прокси (`TELEGRAM_PROXY`), потому что там
+он нужен не из-за VPN на хосте, а из-за блокировки провайдера; установка и обновление прокси,
+деплой и особенности сервера — [deploy/README.md](../deploy/README.md).
+
+Для локальной разработки прод-стек поднимать целиком нельзя: два процесса с одним токеном
+конфликтуют (`409 Conflict`). Достаточно инфраструктуры:
+
+```bash
+docker compose up -d postgres pgbouncer redis
+```
+
 ## 3. Локальный запуск (без Docker)
 
 Подходит для отладки кода на локальной машине. На Windows есть ограничение — см. §8.
