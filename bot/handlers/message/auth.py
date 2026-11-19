@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 from aiogram import Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.utils.i18n import gettext as _
 
 from bot.keyboards.inline.auth import get_cancel_inline_keyboard
@@ -15,6 +14,7 @@ from bot.utils.main_menu import get_main_menu
 
 if TYPE_CHECKING:
     from aiogram.fsm.context import FSMContext
+    from aiogram.types import Message
     from sqlalchemy.ext.asyncio import AsyncSession
 
 router = Router(name="auth")
@@ -26,7 +26,6 @@ class FormAuth(StatesGroup):
 
 
 @router.message(Command("cancel"))
-@router.message(lambda message: message.text == _("cancel_btn"))
 async def cancel_handler(
     message: Message,
     session: AsyncSession,
@@ -36,7 +35,7 @@ async def cancel_handler(
         return
 
     await state.clear()
-    await message.answer(_("cancelled"), reply_markup=ReplyKeyboardRemove())
+    await message.answer(_("cancelled"))
     kb = await get_main_menu_keyboard(session, message.from_user.id)
     text = await get_main_menu(session, message.from_user.id)
     await message.answer(text, reply_markup=kb)
