@@ -1,0 +1,57 @@
+# Локальная разработка. Подхватывается автоматически при `docker compose up`,
+# поэтому привычная команда работает как раньше: docker compose up -d --build
+#
+# Здесь только то, что нужно разработчику: опубликованные порты, живая
+# перезагрузка кода и монтирование админки. На сервере этот файл не используется.
+
+services:
+  bot:
+    ports:
+      - ${WEBHOOK_PORT}:${WEBHOOK_PORT}
+    develop:
+      watch:
+        # Правки кода: файлы копируются в контейнер и процесс перезапускается,
+        # без пересборки образа. Запуск: docker compose watch
+        - action: sync+restart
+          path: ./bot
+          target: /usr/src/app/bot
+        - action: sync+restart
+          path: ./migrations
+          target: /usr/src/app/migrations
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+
+  admin:
+    ports:
+      - ${ADMIN_PORT}:${ADMIN_PORT}
+    volumes:
+      - ./admin:/usr/src/app/admin
+
+  postgres:
+    ports:
+      # Публикуем на отдельный host-порт: 5432/5433 часто заняты локальным Postgres.
+      # Внутри compose-сети порт остаётся 5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-6433}:5432"
+
+  pgbouncer:
+    ports:
+      # Хостовый порт отдельно от DB_PORT (контейнеры ходят на pgbouncer:5432)
+      - "127.0.0.1:${PGBOUNCER_HOST_PORT:-6432}:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
+
+  node-exporter:
+    ports:
+      - 9100:9100
+
+  prometheus:
+    ports:
+      - ${PROMETHEUS_PORT}:${PROMETHEUS_PORT}
+
+  grafana:
+    ports:
+      - ${GRAFANA_PORT}:${GRAFANA_PORT}

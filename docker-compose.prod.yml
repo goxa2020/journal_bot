@@ -1,0 +1,45 @@
+# Сервер (прод). Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Правила этого файла:
+#  * наружу не публикуется ничего, кроме админки на localhost (доступ — SSH-туннель);
+#  * у каждого сервиса лимит памяти, чтобы один контейнер не утащил всю машину;
+#  * мониторинг выключен по умолчанию: включается `--profile monitoring`.
+
+services:
+  bot:
+    mem_limit: 512m
+
+  worker:
+    mem_limit: 768m
+
+  beat:
+    mem_limit: 256m
+
+  admin:
+    ports:
+      - "127.0.0.1:${ADMIN_PORT}:${ADMIN_PORT}"
+    mem_limit: 384m
+
+  migrator:
+    mem_limit: 256m
+
+  postgres:
+    mem_limit: 768m
+
+  pgbouncer:
+    mem_limit: 128m
+
+  pgbackup:
+    mem_limit: 128m
+
+  redis:
+    mem_limit: 256m
+
+  prometheus:
+    profiles: ["monitoring"]
+    mem_limit: 512m
+
+  grafana:
+    profiles: ["monitoring"]
+    mem_limit: 512m
