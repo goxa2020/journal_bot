@@ -114,9 +114,10 @@
 `pytest` (63 теста), `docker compose up -d` (весь стек), `worker` healthy, `beat` пишет
 `beat: Starting...`, `celery inspect ping` → `pong`, `ping.delay().get()` → `pong`,
 `curl /healthz` → `{"status": "ok", "service": "bot"}`, `/metrics` отдаёт метрики.
-Отправка из воркера в Telegram проверена вызовом `send_telegram_message` из контейнера
-`worker` (сообщение пришло в admin-чат из БД). Задач синхронизации и уведомлений нет —
-это фазы 2–3; расписание beat пустое до фазы 4.
+Отправка из воркера проверена вызовом `send_telegram_message` из контейнера `worker` на
+admin-чат из БД: запрос прошёл без ошибок (`admins: 1 sent: 1`); факт доставки подтверждается
+только в самом Telegram — со стороны агента это не проверить. Задач синхронизации и уведомлений
+нет — это фазы 2–3; расписание beat пустое до фазы 4.
 
 ---
 
