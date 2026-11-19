@@ -1,5 +1,4 @@
 from __future__ import annotations
-import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, update
@@ -8,11 +7,7 @@ from bot.cache.redis import build_key, cached, clear_cache
 from bot.core.encryption import decrypt, encrypt
 from bot.database.models import User
 
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from aiogram.types import User as tg_User
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +26,7 @@ async def add_user(
     session.add(new_user)
     await session.commit()
     await clear_cache(user_exists, user.id)
+    await clear_cache(get_user_count)
     return new_user
 
 
@@ -101,6 +97,7 @@ async def set_user_data(  # noqa: PLR0913, PLR0917
     await session.execute(stmt)
     await session.commit()
     await clear_cache(is_authorized, user_id)
+    await clear_cache(get_full_name, user_id)
 
 
 @cached(key_builder=lambda session, user_id: build_key(user_id))
@@ -113,14 +110,18 @@ async def is_admin(session: AsyncSession, user_id: int) -> bool:
     return bool(is_admin)
 
 
-async def set_is_admin(session: AsyncSession, user_id: int, is_admin: bool) -> None:
-    stmt = update(User).where(User.id == user_id).values(is_admin=is_admin)
+async def set_is_admin(session: AsyncSession, user_id: int, value: bool) -> None:
+    stmt = update(User).where(User.id == user_id).values(is_admin=value)
 
     await session.execute(stmt)
     await session.commit()
+    await clear_cache(is_admin, user_id)
+    await clear_cache(get_admins_ids)
 
 
-@cached(key_builder=lambda session: build_key())
+# Кеш не нужен: функция вызывается только в админском экспорте, а ORM-объекты
+# в pickle — это detached-инстансы, которые ломаются при первом обращении к
+# relationship вне сессии. Список id (`get_admins_ids`) кешировать безопасно.
 async def get_all_users(session: AsyncSession) -> list[User]:
     query = select(User)
 
@@ -180,25 +181,16 @@ async def set_edu_credentials(session: AsyncSession, user_id: int, username: str
     await clear_cache(get_edu_credentials, user_id)
 
 
+@cached(key_builder=lambda session, user_id: build_key(user_id))
 async def is_authorized(session: AsyncSession, user_id: int) -> bool:
-    """Проверить, авторизован ли пользователь."""
+    """Проверить, авторизован ли пользователь.
+
+    Проверка идёт на каждом апдейте, поэтому результат кешируется на 10 секунд;
+    `set_user_data` сбрасывает кеш сразу после изменения `is_authenticated`.
+    """
     query = select(User.is_authenticated).filter_by(id=user_id)
 
     result = await session.execute(query)
 
     is_authenticated = result.scalar_one_or_none()
     return bool(is_authenticated)
-
-
-async def update_last_sync(session: AsyncSession, user_id: int, timestamp: datetime) -> None:
-    """Обновить время последней синхронизации."""
-    stmt = update(User).where(User.id == user_id).values(last_sync=timestamp)
-    await session.execute(stmt)
-    await session.commit()
-
-
-async def toggle_notifications(session: AsyncSession, user_id: int, enabled: bool) -> None:
-    """Включить/выключить уведомления."""
-    stmt = update(User).where(User.id == user_id).values(notifications_enabled=enabled)
-    await session.execute(stmt)
-    await session.commit()

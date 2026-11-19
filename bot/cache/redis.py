@@ -44,7 +44,7 @@ async def set_redis_value(
 def cached(
     ttl: int | timedelta = DEFAULT_TTL,
     namespace: str = "main",
-    cache: Redis = redis_client,
+    cache: Redis | None = None,
     key_builder: Callable[..., str] = build_key,
     serializer: AbstractSerializer | None = None,
 ) -> Callable[[Callable[..., Awaitable[_Func]]], Callable[..., Awaitable[_Func]]]:
@@ -53,7 +53,9 @@ def cached(
     Args:
         ttl (int | timedelta): Time-to-live for the cached value.
         namespace (str): Namespace for cache keys.
-        cache (Redis): Redis instance for storing cached data.
+        cache (Redis | None): Redis instance for storing cached data; `None` — the
+            module-level `redis_client`. Resolution happens on every call, so tests
+            can substitute a fake client after import.
         key_builder (Callable[..., str]): Function to build cache keys.
         serializer (AbstractSerializer | None): Serializer for cache data.
 
@@ -67,11 +69,12 @@ def cached(
     def decorator(func: Callable[..., Awaitable[_Func]]) -> Callable[..., Awaitable[_Func]]:
         @wraps(func)
         async def wrapper(*args: Args, **kwargs: Kwargs) -> Any:
+            redis = cache if cache is not None else redis_client
             key = key_builder(*args, **kwargs)
             key = f"{namespace}:{func.__module__}:{func.__name__}:{key}"
 
             # Check if the key is in the cache
-            cached_value = await cache.get(key)
+            cached_value = await redis.get(key)
             if cached_value is not None:
                 return serializer.deserialize(cached_value)
 
@@ -109,7 +112,7 @@ async def clear_cache(
     - namespace (str, optional): A string indicating the namespace for the cache. Defaults to "main".
 
     """
-    namespace = kwargs.get("namespace", "main")
+    namespace = kwargs.pop("namespace", "main")
 
     key = build_key(*args, **kwargs)
     key = f"{namespace}:{func.__module__}:{func.__name__}:{key}"
