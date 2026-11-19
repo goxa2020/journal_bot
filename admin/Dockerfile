@@ -10,9 +10,9 @@ COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --group admin --no-group bot --no-group dev \
-    && adduser -D appuser \
-    && chown -R appuser:appuser .
+    && adduser -u 10001 -D appuser \
+    && chown -R 10001:10001 .
 
-USER appuser
+USER 10001
 
 CMD ["gunicorn", "-c", "admin/gunicorn_conf.py"]

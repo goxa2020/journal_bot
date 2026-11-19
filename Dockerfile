@@ -14,14 +14,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # 2. Пользователь и каталог логов создаются до копирования кода, чтобы
 #    не делать дорогой `chown -R` по .venv на каждой сборке.
-RUN adduser -D appuser \
+RUN adduser -u 10001 -D appuser \
     && mkdir -p /usr/src/app/logs \
-    && chown -R appuser:appuser /usr/src/app/logs
+    && chown -R 10001:10001 /usr/src/app/logs
 
 # 3. Код и локали: меняются часто, поэтому копируются после зависимостей.
-COPY --chown=appuser:appuser . .
+COPY --chown=10001:10001 . .
 RUN pybabel compile -d ./bot/locales
 
-USER appuser
+USER 10001
 
 CMD ["python", "-m", "bot"]
