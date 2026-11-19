@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -84,7 +84,7 @@ class JournalParser:
             full_name=full_name,
         )
 
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
         cutoff = today - timedelta(days=days)
 
         lessons: list[dict[str, Any]] = []
@@ -169,7 +169,7 @@ class JournalParser:
             timeout=timeout,  # Client с токеном
         ) as client:
             # Определить учебный год
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             september = 9
             http_unauthorized = 401
             year = f"{now.year}-{now.year + 1}" if now.month >= september else f"{now.year - 1}-{now.year}"

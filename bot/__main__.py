@@ -110,7 +110,7 @@ async def wait_for_telegram() -> None:
     while True:
         try:
             await bot.get_me(request_timeout=10)
-        except TelegramNetworkError as exc:  # noqa: PERF203 — это retry-цикл
+        except TelegramNetworkError as exc:
             attempt += 1
             logger.warning(
                 "Telegram недоступен ({}): {} | проверьте VPN и TELEGRAM_PROXY={} | попытка {}",
