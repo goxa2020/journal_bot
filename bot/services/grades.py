@@ -2,13 +2,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Float, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
 from bot.database.models import Grade, Journal
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from datetime import date, datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,6 +72,31 @@ class GradesService:
         query = select(Grade).filter(Grade.user_id == user_id).order_by(Grade.date.desc()).limit(limit)
         result = await session.execute(query)
         return list(result.scalars().all())
+
+    @classmethod
+    async def get_last_grade(
+        cls,
+        session: AsyncSession,
+        user_id: int,
+    ) -> tuple[str, str, date] | None:
+        """Последняя оценка пользователя и название журнала (для главного меню).
+
+        Join выполняется в том же запросе: в async-контексте ленивая загрузка
+        `grade.journal` невозможна. Возвращает `None`, если оценок ещё нет.
+        """
+        query = (
+            select(Grade.value, Journal.name, Grade.date)
+            .join(Journal, Journal.id == Grade.journal_id)
+            .where(Grade.user_id == user_id)
+            .order_by(Grade.date.desc(), Grade.id.desc())
+            .limit(1)
+        )
+        result = await session.execute(query)
+        row = result.first()
+        if row is None:
+            return None
+        value, journal_name, grade_date = row
+        return value, journal_name, grade_date
 
     @classmethod
     async def stats(
