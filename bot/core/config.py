@@ -107,6 +107,11 @@ class CelerySettings(EnvBaseSettings):
     CELERY_WORKER_PREFETCH_MULTIPLIER: int = 1
     CELERY_WORKER_MAX_TASKS_PER_CHILD: int = 1000
     CELERY_WORKER_CONCURRENCY: int = 4
+    # Сколько секунд хранить результаты задач в backend (Redis, база 2).
+    CELERY_RESULT_EXPIRES: int = 86400
+    # True: задачи выполняются в вызывающем процессе без брокера. Для тестов и
+    # ручной отладки (docs/DEVELOPMENT.md §10); в бою — False.
+    CELERY_TASK_ALWAYS_EAGER: bool = False
 
 
 class Settings(BotSettings, DBSettings, CacheSettings, CelerySettings):
