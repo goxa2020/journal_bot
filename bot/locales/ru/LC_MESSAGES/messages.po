@@ -154,6 +154,10 @@ msgstr ""
 msgid "last_grade.none"
 msgstr "Оценки не найдены"
 
+#: bot/handlers/callback/stubs.py:14
+msgid "stub.in_development"
+msgstr "🚧 В разработке"
+
 #~ msgid "bot started"
 #~ msgstr "Бот запущен!"
 

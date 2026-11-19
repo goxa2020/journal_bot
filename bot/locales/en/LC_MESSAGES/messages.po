@@ -148,3 +148,7 @@ msgstr ""
 #: bot/utils/main_menu.py:14
 msgid "last_grade.none"
 msgstr "No grades found"
+
+#: bot/handlers/callback/stubs.py:14
+msgid "stub.in_development"
+msgstr "🚧 In development"
