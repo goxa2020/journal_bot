@@ -62,8 +62,8 @@ fix = true
 unsafe-fixes = true
 line-length = 120
 lint.select = ["ALL"]
-lint.ignore = ["D", "ANN401", "FIX002", "COM812", "ISC001", "FBT001", "FBT002", "ERA", "ARG005", "PGH003", "RUF001", "RUF002", "RUF003"]
-extend-exclude = ["logs", "configs", "migrations", ".pre-commit-cache", ".agents"]
+lint.ignore = ["D", "ANN401", "FIX002", "COM812", "ISC001", "FBT001", "FBT002", "ERA", "ARG005", "PGH003", "RUF001", "RUF002", "RUF003", "CPY"]
+extend-exclude = ["logs", "configs", "migrations", "docs", ".pre-commit-cache", ".agents"]
 
 [tool.ruff.lint.isort]
 no-lines-before = ["future", "standard-library"]

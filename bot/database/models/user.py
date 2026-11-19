@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime
+import datetime as dt
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Index, String
@@ -27,9 +27,9 @@ class User(Base):
     is_authenticated: Mapped[bool] = mapped_column(default=False)
     notification_enabled: Mapped[bool] = mapped_column(default=True)
     morning_notification_enabled: Mapped[bool] = mapped_column(default=True)
-    morning_notification_time: Mapped[datetime.time | None] = mapped_column(default=datetime.time(8, 0))
-    watch_mode_expires_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
-    watch_mode_last_sync_at: Mapped[datetime.datetime | None] = mapped_column(nullable=True)
+    morning_notification_time: Mapped[dt.time | None] = mapped_column(default=dt.time(8, 0))
+    watch_mode_expires_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    watch_mode_last_sync_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[created_at]
     updated_at: Mapped[updated_at]
 
