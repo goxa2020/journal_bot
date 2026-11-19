@@ -6,7 +6,8 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.i18n import gettext as _
 
-from bot.keyboards.inline.auth import get_cancel_inline_keyboard
+from bot.core.encryption import decrypt, encrypt
+from bot.keyboards.inline.auth import get_auth_error_keyboard, get_cancel_inline_keyboard
 from bot.keyboards.inline.menu import get_main_menu_keyboard
 from bot.services.api_client import EduUnavailableError
 from bot.services.auth import edit_bot_message, handle_auth_login, handle_auth_password
@@ -23,6 +24,101 @@ router = Router(name="auth")
 class FormAuth(StatesGroup):
     login = State()
     password = State()
+
+
+async def show_main_menu(
+    message: Message,
+    session: AsyncSession,
+    user_id: int,
+    bot_message_id: int | None,
+    prefix: str = "",
+) -> None:
+    """Заменить сообщение бота на главное меню, не отправляя новое."""
+    kb = await get_main_menu_keyboard(session, user_id)
+    text = await get_main_menu(session, user_id)
+    await edit_bot_message(message, bot_message_id, prefix + text, kb)
+
+
+async def _restart_login(
+    message: Message,
+    state: FSMContext,
+    bot_message_id: int | None,
+) -> None:
+    """Вернуть пользователя к вводу логина, если учётных данных в состоянии нет."""
+    bot_message_id = await edit_bot_message(
+        message,
+        bot_message_id,
+        _("auth.enter_login"),
+        get_cancel_inline_keyboard(),
+    )
+    await state.update_data(bot_message_id=bot_message_id, password_enc=None)
+    await state.set_state(FormAuth.login)
+
+
+async def run_auth_attempt(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    user_id: int,
+) -> None:
+    """Одна попытка входа: общий путь для ввода пароля и для кнопки «Ещё раз».
+
+    Логин и пароль берутся из состояния: пароль там лежит только шифротекстом,
+    поэтому повтор не требует, чтобы пользователь вводил его заново.
+    """
+    data = await state.get_data()
+    bot_message_id = data.get("bot_message_id")
+    login = data.get("login")
+    token = data.get("password_enc")
+    password = decrypt(token) if isinstance(token, str) else None
+
+    if not login or not password:
+        # Состояние истекло (рестарт Redis) или ключ шифрования сменился
+        await _restart_login(message, state, bot_message_id)
+        return
+
+    bot_message_id = await edit_bot_message(message, bot_message_id, _("auth.auth_started"), None)
+    await state.update_data(bot_message_id=bot_message_id)
+
+    try:
+        success, __ = await handle_auth_password(
+            user_id=user_id,
+            login=login,
+            password=password,
+            session=session,
+        )
+    except EduUnavailableError:
+        bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
+            _("auth.unavailable"),
+            get_auth_error_keyboard(),
+        )
+        await state.update_data(bot_message_id=bot_message_id)
+        await state.set_state(FormAuth.password)
+        return
+
+    if not success:
+        # Пароль не подошёл — повторять его бессмысленно, начинаем с логина.
+        bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
+            _("auth.failed"),
+            get_cancel_inline_keyboard(),
+        )
+        await state.update_data(bot_message_id=bot_message_id, password_enc=None)
+        await state.set_state(FormAuth.login)
+        return
+
+    # Успех: одно сообщение вместо «успех» + новое меню.
+    await state.clear()
+    await show_main_menu(
+        message,
+        session,
+        user_id,
+        bot_message_id,
+        prefix=f"{_('auth.success')}\n\n",
+    )
 
 
 @router.message(Command("cancel"))
@@ -88,8 +184,9 @@ async def process_password(
 
     data = await state.get_data()
     bot_message_id = data.get("bot_message_id")
+    login = data.get("login")
 
-    # Удаляем сообщение пользователя
+    # Удаляем сообщение пользователя: пароль не должен оставаться в чате
     await message.delete()
 
     if not message.text or len(message.text.strip()) == 0:
@@ -102,57 +199,12 @@ async def process_password(
         await state.update_data(bot_message_id=new_bot_message_id)
         return
 
-    password = message.text.strip()
-    login = data["login"]
-
-    # Редактируем сообщение на "Авторизация запущена..."
-    bot_message_id = await edit_bot_message(
-        message,
-        bot_message_id,
-        _("auth.auth_started"),
-        None,
-    )
-    await state.update_data(bot_message_id=bot_message_id)
-
-    # Выполняем авторизацию через сервис
-    try:
-        success, __ = await handle_auth_password(
-            user_id=message.from_user.id,
-            login=login,
-            password=password,
-            session=session,
-        )
-    except EduUnavailableError:
-        bot_message_id = await edit_bot_message(
-            message,
-            bot_message_id,
-            _("auth.unavailable"),
-            get_cancel_inline_keyboard(),
-        )
-        await state.update_data(bot_message_id=bot_message_id)
-        await state.set_state(FormAuth.password)
+    if not login:
+        await _restart_login(message, state, bot_message_id)
         return
 
-    if not success:
-        bot_message_id = await edit_bot_message(
-            message,
-            bot_message_id,
-            _("auth.failed"),
-            get_cancel_inline_keyboard(),
-        )
-        await state.update_data(bot_message_id=bot_message_id)
-        await state.set_state(FormAuth.login)
-        return
+    # Пароль нужен кнопке «Ещё раз». В состоянии он лежит только шифротекстом:
+    # открытый пароль не попадает ни в Redis, ни в логи.
+    await state.update_data(password_enc=encrypt(message.text.strip()))
 
-    # Успешная авторизация
-    await edit_bot_message(
-        message,
-        bot_message_id,
-        _("auth.success"),
-        None,
-    )
-
-    await state.clear()
-    kb = await get_main_menu_keyboard(session, message.from_user.id)
-    text = await get_main_menu(session, message.from_user.id)
-    await message.answer(text, reply_markup=kb)
+    await run_auth_attempt(message, session, state, message.from_user.id)

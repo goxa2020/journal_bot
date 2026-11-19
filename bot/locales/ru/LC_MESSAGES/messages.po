@@ -59,7 +59,15 @@ msgstr "❌ Логин или пароль неверны. Попробуйте 
 
 #: bot/handlers/message/auth.py:132
 msgid "auth.unavailable"
-msgstr "⚠️ Сервис журнала недоступен. Попробуйте ещё раз:"
+msgstr "⚠️ Сервис журнала недоступен."
+
+#: bot/keyboards/inline/auth.py:30
+msgid "auth.retry_btn"
+msgstr "🔄 Ещё раз"
+
+#: bot/keyboards/inline/auth.py:31
+msgid "auth.change_data_btn"
+msgstr "✏️ Сменить данные"
 
 #: bot/handlers/message/auth.py:140
 msgid "auth.success"

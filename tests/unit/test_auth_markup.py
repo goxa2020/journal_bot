@@ -7,7 +7,7 @@ from aiogram.methods import EditMessageText
 from aiogram.types import InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from pydantic import ValidationError
 
-from bot.keyboards.inline.auth import get_cancel_inline_keyboard
+from bot.keyboards.inline.auth import get_auth_error_keyboard, get_cancel_inline_keyboard
 from bot.services.auth import edit_bot_message
 
 
@@ -16,6 +16,13 @@ def test_cancel_keyboard_is_inline(ru_locale) -> None:
 
     assert isinstance(keyboard, InlineKeyboardMarkup)
     assert keyboard.inline_keyboard[0][0].callback_data == "auth_cancel"
+
+
+def test_auth_error_keyboard_offers_retry_change_and_cancel(ru_locale) -> None:
+    keyboard = get_auth_error_keyboard()
+    rows = [[button.callback_data for button in row] for row in keyboard.inline_keyboard]
+
+    assert rows == [["auth_retry", "auth_start"], ["auth_cancel"]]
 
 
 def test_edit_message_text_accepts_inline_keyboard(ru_locale) -> None:

@@ -58,7 +58,15 @@ msgstr "❌ Authorization failed. Try again:"
 
 #: bot/handlers/message/auth.py:132
 msgid "auth.unavailable"
-msgstr "⚠️ Journal service is unavailable. Try again:"
+msgstr "⚠️ Journal service is unavailable."
+
+#: bot/keyboards/inline/auth.py:30
+msgid "auth.retry_btn"
+msgstr "🔄 Retry"
+
+#: bot/keyboards/inline/auth.py:31
+msgid "auth.change_data_btn"
+msgstr "✏️ Change data"
 
 #: bot/handlers/message/auth.py:140
 msgid "auth.success"
