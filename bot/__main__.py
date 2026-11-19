@@ -11,6 +11,7 @@ from loguru import logger
 from sentry_sdk.integrations.loguru import LoggingLevels, LoguruIntegration
 
 from bot.core.config import settings
+from bot.core.health import start_health_server, stop_health_server
 from bot.core.loader import app, bot, dp
 from bot.handlers import get_handlers_router
 from bot.handlers.message.metrics import MetricsView
@@ -62,6 +63,8 @@ async def on_startup() -> None:
 
 async def on_shutdown() -> None:
     logger.info("bot stopping...")
+
+    await stop_health_server()
 
     await remove_default_commands(bot)
 
@@ -146,15 +149,24 @@ async def main() -> None:
         compression="zip",
     )
 
+    if not settings.USE_WEBHOOK:
+        # /healthz и /metrics — liveness процесса бота: поднимаем до ожидания Telegram,
+        # чтобы healthcheck не краснел, пока бот ждёт недоступный Bot API.
+        await start_health_server()
+
     await wait_for_telegram()
 
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    if settings.USE_WEBHOOK:
-        await setup_webhook()
-    else:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    try:
+        if settings.USE_WEBHOOK:
+            await setup_webhook()
+        else:
+            await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        # страховка: on_shutdown вызывается только при штатной остановке polling
+        await stop_health_server()
 
 
 def _run(entrypoint: Coroutine[Any, Any, None]) -> None:
