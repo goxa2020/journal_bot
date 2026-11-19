@@ -28,10 +28,12 @@ bot = [
     "loguru>=0.7.3,<1.0.0",
     "sentry-sdk[loguru]>=2.68.0,<3.0.0",
     "aiohttp[speedups]>=3.14.3,<4.0.0",
-    "uvloop>=0.21.0,<1.0.0",
+    "aiohttp-socks>=0.10.1,<1.0.0",
+    "uvloop>=0.21.0,<1.0.0; sys_platform != 'win32'",
     "babel>=2.17.0,<3.0.0",
     "cachetools>=7.1.7,<8.0.0",
     "orjson>=3.12.0,<4.0.0",
+    "tzdata>=2024.1",
     "alembic>=1.19.1,<2.0.0",
     "prometheus-client>=0.26.0,<1.0.0",
 ]
@@ -52,6 +54,7 @@ dev = [
     "pre-commit>=4.6.2,<5.0.0",
     "types-cachetools>=7.0.0.20260713,<8.0.0.0",
     "alembic>=1.19.1",
+    "watchfiles>=0.21,<2.0",
 ]
 
 [tool.ruff]
@@ -60,8 +63,7 @@ unsafe-fixes = true
 line-length = 120
 lint.select = ["ALL"]
 lint.ignore = ["D", "ANN401", "FIX002", "COM812", "ISC001", "FBT001", "FBT002", "ERA", "ARG005", "PGH003", "RUF001", "RUF002", "RUF003"]
-cache-dir = "/tmp/ruff-cache/"
-extend-exclude = ["logs", "configs", "migrations"]
+extend-exclude = ["logs", "configs", "migrations", ".pre-commit-cache", ".agents"]
 
 [tool.ruff.lint.isort]
 no-lines-before = ["future", "standard-library"]

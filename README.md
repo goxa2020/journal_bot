@@ -1,287 +1,134 @@
 <h1 align="center">📔 Journal Bot</h1>
 
 <h3 align="center">
-Telegram бот для студентов ПИ ДГТУ с доступом к электронному журналу успеваемости
+Telegram-бот с доступом к электронному журналу успеваемости edu-tpi ДГТУ
 </h3>
 
 <p align="center">
-<a href="https://www.python.org/downloads"><img alt="GitHub top language" src="https://img.shields.io/github/languages/top/goxa2020/journal_bot?logo=python&logoColor=white"></a>
-<a href="https://github.com/goxa2020/journal_bot/commits/main/"><img alt="GitHub commit activity" src="https://img.shields.io/github/commit-activity/w/goxa2020/journal_bot?logo=conventionalcommits&logoColor=white&label=commits"></a>
-<a href="https://github.com/goxa2020/journal_bot/actions/workflows/linters.yml"><img src="https://img.shields.io/github/actions/workflow/status/goxa2020/journal_bot/linters.yml?label=linters&logo=precommit&logoColor=white" alt="Linters Status"/>
-</a>
+<a href="https://www.python.org/downloads"><img alt="Python" src="https://img.shields.io/github/languages/top/goxa2020/journal_bot?logo=python&logoColor=white"></a>
+<a href="https://github.com/goxa2020/journal_bot/commits/main/"><img alt="Commits" src="https://img.shields.io/github/commit-activity/w/goxa2020/journal_bot?logo=conventionalcommits&logoColor=white&label=commits"></a>
+<a href="https://github.com/goxa2020/journal_bot/actions/workflows/linters.yml"><img src="https://img.shields.io/github/actions/workflow/status/goxa2020/journal_bot/linters.yml?label=linters&logo=precommit&logoColor=white" alt="Linters Status"/></a>
 </p>
 
 > [!WARNING]
-> **🚧 Проект находится в активной разработке**
+> **🚧 Проект в активной разработке**
 >
-> Бот пока не доступен для публичного использования.
-> Следите за обновлениями!
+> Готовы вход в edu-tpi, инфраструктура и каркас бота. Оценки, синхронизация и уведомления —
+> в работе. Бот не предназначен для публичного использования до готовности MVP.
+> Актуальное состояние — [docs/ROADMAP.md](docs/ROADMAP.md).
 
-<!--
- > [!NOTE]
- > **🤖 Попробовать бота**: [@your_bot_username](https://t.me/your_bot_username)
- > -->
-## 📖 О проекте
+## О проекте
 
-Journal Bot — это Telegram бот для студентов Политеха, который предоставляет удобный доступ к электронному журналу успеваемости `edu-tpi.donstu.ru` прямо в мессенджере. Проект построен на современном асинхронном стеке технологий с использованием профессиональной архитектуры для обеспечения безопасности, производительности и масштабируемости.
+Journal Bot даёт студенту в Telegram то, ради чего иначе открывают веб-журнал `edu-tpi.donstu.ru`:
+оценки, посещаемость, средний балл и уведомления о новых оценках. Каждый пользователь входит
+своим edu-логином; данные из журнала забираются в фоне и складываются в PostgreSQL.
 
+### Что работает сейчас
 
-### 🎯 Основные возможности
+- ✅ вход в edu-tpi внутри бота: логин → пароль → данные пользователя (`/start`);
+- ✅ хранение учётных данных в зашифрованном виде (Fernet) и токена в Redis;
+- ✅ разбор журнала: список дисциплин, детали, оценки и посещаемость (библиотека, без записи в БД);
+- ✅ каркас: локализация ru/en, меню, регистрация пользователей, аналитика, Sentry,
+  HTTP-метрики webhook-сервера;
+- ✅ админ-панель Flask-Admin: вход по ролям, список пользователей;
+- ✅ Docker Compose: бот, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы, Prometheus, Grafana;
+- 🟡 профиль пользователя и реальная последняя оценка в меню — в работе.
 
-- 📊 **Просмотр оценок** - получайте актуальную информацию об оценках по всем дисциплинам
-- 🔔 **Уведомления** - автоматические алерты о появлении новых оценок в электронном журнале
-- 📈 **Статистика** - анализ успеваемости: средний балл, динамика по предметам, посещаемость
-- 📅 **Фильтрация** - просмотр оценок за выбранный период или по конкретной дисциплине
-- 📄 **Экспорт данных** - выгрузка таблиц с оценками в Excel для дальнейшего анализа
-- 🔐 **Безопасность** - шифрование учетных данных edu-tpi в защищенной базе PostgreSQL
-- 🔄 **Авто-синхронизация** - регулярное обновление данных из электронного журнала
+### Что в плане
 
+- ⬜ синхронизация оценок из журнала (Celery-воркер) и экран `/grades`;
+- ⬜ уведомления о новых оценках, в том числе ночных — с доставкой утром;
+- ⬜ автоматическая синхронизация по расписанию, режим ожидания оценок;
+- ⬜ статистика: средний балл, посещаемость, динамика;
+- ⬜ экспорт в Excel, месячный дайджест, расширенная админка.
 
-### 🔧 Фишки
+Полный план с оценками и критериями приёмки — [docs/ROADMAP.md](docs/ROADMAP.md).
 
-- 🔐 **Безопасность** - все данные хранятся в защищенной базе данных PostgreSQL
-- 🎨 **Админ-панель** - удобный веб-интерфейс на Flask-Admin для управления
-- 📊 **Аналитика** - интеграция с Amplitude, PostHog или Google Analytics
-- 📈 **Мониторинг** - Prometheus + Grafana для отслеживания производительности
-- 🐛 **Отслеживание ошибок** - интеграция с Sentry
-- 🌍 **Интернационализация** - поддержка нескольких языков
+## Документация
 
-## 👥 Для кого этот бот
+| Документ | О чём |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | целевая архитектура: компоненты, данные, Celery, потоки, безопасность, принятые решения |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | план разработки: текущее состояние, фазы, задачи, Definition of Done |
+| [docs/API.md](docs/API.md) | спецификация edu-tpi API: эндпоинты, поля, подвохи, ошибки |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | запуск, команды, миграции, локализация, тесты, отладка |
+| [docs/archive/](docs/archive/README.md) | документы первой итерации (не актуальны, оставлены как история) |
 
-Journal Bot создан для студентов ПИ ДГТУ, которые хотят:
-- Быстро проверять оценки без входа в веб-версию журнала
-- Получать мгновенные уведомления о новых оценках
-- Отслеживать свою академическую успеваемость
-- Экспортировать данные для личного анализа
+## Технологии
 
-## 🔒 Безопасность и конфиденциальность
+**Бот:** Python 3.13, aiogram 3.24, SQLAlchemy 2.0 (asyncpg), Alembic, Pydantic v2, Redis (FSM, кеш),
+Celery + Redis (план), gettext для локализации, loguru, Sentry, prometheus-client.
 
-- Все учетные данные от edu-tpi шифруются с использованием Fernet (симметричное шифрование)
-- Пароли хранятся в зашифрованном виде в защищенной базе данных PostgreSQL
-- Ключи шифрования хранятся отдельно в переменных окружения
-- Регулярное обновление зависимостей для устранения уязвимостей
-- Rate limiting для защиты от злоупотреблений
+**Данные:** PostgreSQL 14 через PgBouncer, Redis 7.
 
-## 📋 Требования
+**Админка:** Flask-Admin, Flask-Security, Flask-SQLAlchemy, gunicorn.
 
-- Python 3.10 или выше
-- PostgreSQL 15+
-- Redis 7+
-- Аккаунт в системе edu-tpi.donstu.ru
-- Telegram Bot Token (получить у [@BotFather](https://t.me/botfather))
+**Инфраструктура:** Docker Compose, uv, just/make, pre-commit, GitHub Actions (ruff, mypy, CodeQL,
+Hadolint, Dependabot), Prometheus + Grafana, бэкапы PostgreSQL.
 
-## 🎮 Основные команды бота
+## Быстрый старт
 
-- `/start` - Начать работу с ботом
-- `/login` - Авторизация в системе edu-tpi
-- `/grades` - Показать все оценки за текущий семестр
-- `/stats` - Статистика успеваемости и посещаемости
-- `/sync` - Принудительная синхронизация с журналом
-- `/settings` - Настройки уведомлений и параметров
-- `/logout` - Выход из системы
+1. Склонировать и создать окружение:
 
-## 🚧 Дорожная карта
-
-- [ ] Базовая авторизация и синхронизация с edu-tpi
-- [ ] Просмотр оценок и фильтрация по предметам
-- [ ] Система уведомлений о новых оценках
-- [ ] Статистика и аналитика успеваемости
-- [ ] Экспорт данных в Excel/PDF
-- [ ] Графики динамики успеваемости
-- [ ] Напоминания о предстоящих экзаменах
-- [ ] Интеграция с расписанием занятий
-- [ ] Поддержка других вузов
-
-## ⚠️ Дисклеймер
-
-Этот бот является неофициальным инструментом и не связан с официальной системой edu-tpi.donstu.ru или администрацией ДГТУ. Используйте на свой страх и риск. Разработчики не несут ответственности за сохранность учетных данных и точность отображаемой информации.
-
-## 🚀 Быстрый старт
-
-### С использованием Docker (рекомендуется)
-
-1. Клонируйте репозиторий:
-```
+```bash
 git clone https://github.com/goxa2020/journal_bot.git
 cd journal_bot
-```
-
-2. Создайте `.env` файл на основе `.env.example`:
-```
 cp .env.example .env
 ```
 
-3. Настройте переменные окружения в `.env` файле (как минимум `BOT_TOKEN`, настройки БД и Redis)
+2. Заполнить в `.env` минимум `BOT_TOKEN` и `ENCRYPTION_KEY`
+   (ключ: `uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
+   Если VPN работает только на хосте, добавьте `TELEGRAM_PROXY=http://host.docker.internal:10809`
+   (порт локального прокси VPN-клиента) — иначе контейнер не достучится до Telegram.
 
-4. Запустите сервисы:
-```
+3. Запустить:
+
+```bash
 docker compose up -d --build
+docker compose logs -f bot
 ```
 
-### Локальный запуск (может не работать на windows)
+Миграции применяются автоматически сервисом `migrator`. Админка — `http://localhost:${ADMIN_PORT}`,
+Prometheus — `:9090`, Grafana — `:3000`.
 
-1. Установите зависимости с помощью [uv](https://docs.astral.sh/uv/):
-```
+Локальный запуск без Docker, быстрый цикл (`just dev`, `just watch`), миграции, тесты и отладка —
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-uv sync --frozen --all-groups
-
-```
-
-2. Запустите необходимые сервисы (PostgreSQL и Redis)
-
-3. Настройте `.env` файл
-
-4. Примените миграции:
-```
-
-uv run alembic upgrade head
-
-```
-
-5. Запустите бота:
-```
-
-uv run python -m bot
-
-```
-
-6. Запустите админ-панель (опционально):
-```
-
-uv run gunicorn -c admin/gunicorn_conf.py
-```
-
-## 🔧 Технологический стек
-
-### Backend
-- **Python 3.10+** - основной язык разработки
-- **aiogram** - асинхронный фреймворк для Telegram Bot API
-- **SQLAlchemy 2.0** - ORM для работы с базой данных
-- **Alembic** - система миграций базы данных
-- **Pydantic V2** - валидация данных
-
-### Databases & Cache
-- **PostgreSQL** - основная база данных
-- **Redis** - кеширование и FSM
-- **PGBouncer** - connection pooling для PostgreSQL
-
-### DevOps
-- **Docker & Docker Compose** - контейнеризация
-- **uv** - современный менеджер пакетов Python
-- **GitHub Actions** - CI pipeline
-- **pre-commit** - git hooks для качества кода
-
-### Monitoring & Analytics
-- **Prometheus** - сбор метрик
-- **Grafana** - визуализация метрик
-- **Sentry** - отслеживание ошибок
-- **Amplitude/PostHog** - продуктовая аналитика
-
-### Admin Panel
-- **Flask-Admin** - административный интерфейс
-- **AdminLTE** - UI для админ-панели
-- **Gunicorn** - WSGI сервер
-
-## 📁 Структура проекта
+## Структура репозитория
 
 ```
 journal_bot/
-├── bot/                # Основной код бота
-│   ├── handlers/         # Обработчики команд и событий
-│   ├── keyboards/        # Клавиатуры (inline и reply)
-│   ├── database/         # Модели и работа с БД
-│   ├── middlewares/      # Промежуточные обработчики
-│   ├── services/         # Бизнес-логика
-│   ├── locales/          # Файлы локализации
-│   └── core/             # Настройки и конфигурация
-├── admin/              # Админ-панель
-├── migrations/         # Миграции Alembic
-├── configs/            # Конфигурации для мониторинга
-├── scripts/            # Вспомогательные скрипты
-├── docker-compose.yml  # Docker Compose конфигурация
-├── Dockerfile          # Dockerfile для бота
-├── Makefile            # Make команды
-└── pyproject.toml      # Зависимости и настройки проекта
+├── bot/                # бот: handlers, services, database, locales, middlewares
+├── admin/              # админ-панель Flask-Admin
+├── docs/               # документация (актуальная и архив)
+├── migrations/         # миграции Alembic
+├── configs/            # Prometheus, Grafana
+├── scripts/            # бэкапы и вспомогательные скрипты
+├── docker-compose.yml  # окружение разработки и деплоя
+├── justfile / Makefile # команды
+└── pyproject.toml      # зависимости, настройки ruff/mypy
 ```
 
-## ⚙️ Конфигурация
+Каталог `dev/` — остаток первой итерации, содержимое переехало в `docs/`.
 
-Основные переменные окружения в `.env`:
+## Безопасность
 
-| Переменная | Описание |
-|-----------|----------|
-| `BOT_TOKEN` | Токен Telegram бота |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` | Настройки PostgreSQL |
-| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASS` | Настройки Redis |
-| `ADMIN_HOST`, `ADMIN_PORT` | Настройки админ-панели |
-| `SENTRY_DSN` | DSN для Sentry (опционально) |
-| `AMPLITUDE_API_KEY` | API ключ Amplitude (опционально) |
+- учётные данные edu-tpi шифруются Fernet, ключ — только в переменных окружения;
+- пароль никогда не пишется в логи, Sentry и Redis;
+- токен живёт только в Redis с TTL и восстанавливается повторным входом;
+- ограничение частоты апдейтов на пользователя, защита от параллельных синхронизаций;
+- секреты не попадают в репозиторий: `.env` в `.gitignore`, в примере — только плейсхолдеры.
 
-Полный список переменных смотрите в файле `.env.example`
+## Дисклеймер
 
-## 🛠️ Разработка
+Бот неофициальный и не связан с `edu-tpi.donstu.ru` или администрацией ДГТУ. API используется
+на свой риск: он не документирован и может измениться. Разработчики не гарантируют точность
+отображаемых данных и сохранность учётных записей.
 
-### Установка pre-commit hooks
+## Лицензия
 
-```
-uv run pre-commit install
-
-```
-
-### Создание новой миграции
-
-```
-
-uv run alembic revision --autogenerate -m "описание изменений"
-
-```
-
-### Применение миграций
-
-```
-
-uv run alembic upgrade head
-
-```
-
-### Make команды
-
-```
-
-make help           \# Показать все доступные команды
-make lint           \# Запустить линтеры
-make format         \# Форматировать код
-make migrate        \# Применить миграции
-
-```
-
-
-## 📊 Мониторинг
-
-После запуска через Docker Compose доступны:
-
-- **Grafana**: http://localhost:3000
-- **Prometheus**: http://localhost:9090
-- **Админ-панель**: http://localhost:8000
-
-## 🤝 Вклад в проект
-
-Буду рад вашему вкладу! Если у вас есть предложения по улучшению:
-
-1. Сделайте Fork репозитория
-2. Создайте ветку для новой функции (`git checkout -b feature/amazing-feature`)
-3. Зафиксируйте изменения (`git commit -m 'Add amazing feature'`)
-4. Отправьте в ветку (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
-
-## 📝 Лицензия
-
-Проект распространяется под лицензией MIT. Подробности в файле [LICENSE](LICENSE).
-
-## 📬 Контакты
-
-Автор: [goxa2020](https://github.com/goxa2020)
+MIT — см. [LICENSE](LICENSE).
 
 ---
 
-<p align="center">Сделано с ❤️ для вашего удобства</p>
+<p align="center">Сделано с ❤️ для студентов ПИ ДГТУ</p>

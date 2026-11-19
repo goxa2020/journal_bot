@@ -35,4 +35,4 @@ async def start_handler(message: Message, session: AsyncSession, new_user: bool 
     else:
         welcome_text = _(secrets.choice(WELCOME_VARIANTS))
         main_text = await get_main_menu(session, message.from_user.id)
-        await message.answer(welcome_text + main_text, reply_markup=kb)
+        await message.answer(welcome_text + "\n" + main_text, reply_markup=kb)

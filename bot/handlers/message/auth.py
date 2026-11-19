@@ -1,6 +1,5 @@
 from __future__ import annotations
-import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from aiogram import Router
 from aiogram.filters import Command, StateFilter
@@ -8,11 +7,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.utils.i18n import gettext as _
 
+from bot.keyboards.inline.auth import get_cancel_inline_keyboard
 from bot.keyboards.inline.menu import get_main_menu_keyboard
-from bot.keyboards.reply import get_cancel_keyboard
-from bot.services.api_client import get_auth_data
-from bot.services.auth import authenticate_user
-from bot.services.users import set_edu_credentials, set_user_data
+from bot.services.api_client import EduUnavailableError
+from bot.services.auth import edit_bot_message, handle_auth_login, handle_auth_password
 from bot.utils.main_menu import get_main_menu
 
 if TYPE_CHECKING:
@@ -49,26 +47,34 @@ async def process_login(
     message: Message,
     state: FSMContext,
 ) -> None:
-    if not message.text:
-        await message.answer(
+    data = await state.get_data()
+    bot_message_id = data.get("bot_message_id")
+
+    # Удаляем сообщение пользователя
+    await message.delete()
+
+    # Обрабатываем логин через сервис
+    new_data, success = await handle_auth_login(message.text, data)
+    if not success:
+        new_bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
             _("auth.enter_login_invalid"),
-            reply_markup=get_cancel_keyboard(),
+            get_cancel_inline_keyboard(),
         )
+        await state.update_data(bot_message_id=new_bot_message_id)
         return
 
-    login = message.text.strip()
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", login):
-        await message.answer(
-            _("auth.enter_login_invalid"),
-            reply_markup=get_cancel_keyboard(),
-        )
-        return
+    await state.set_data(new_data)
+    login = new_data["login"]
 
-    await state.update_data(login=login)
-    await message.answer(
-        _("auth.enter_pass"),
-        reply_markup=get_cancel_keyboard(),
+    new_bot_message_id = await edit_bot_message(
+        message,
+        bot_message_id,
+        _("auth.enter_pass_with_login").format(login=login),
+        get_cancel_inline_keyboard(),
     )
+    await state.update_data(bot_message_id=new_bot_message_id)
     await state.set_state(FormAuth.password)
 
 
@@ -81,55 +87,70 @@ async def process_password(
     if not message.from_user:
         return
 
-    if not message.text:
-        await message.answer(
+    data = await state.get_data()
+    bot_message_id = data.get("bot_message_id")
+
+    # Удаляем сообщение пользователя
+    await message.delete()
+
+    if not message.text or len(message.text.strip()) == 0:
+        new_bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
             _("auth.enter_pass_invalid"),
-            reply_markup=get_cancel_keyboard(),
+            get_cancel_inline_keyboard(),
         )
+        await state.update_data(bot_message_id=new_bot_message_id)
         return
 
     password = message.text.strip()
-    if len(password) == 0:
-        await message.answer(
-            _("auth.enter_pass_invalid"),
-            reply_markup=get_cancel_keyboard(),
-        )
-        return
-
-    data = await state.get_data()
     login = data["login"]
 
-    access_token = await authenticate_user(login, password)
+    # Редактируем сообщение на "Авторизация запущена..."
+    bot_message_id = await edit_bot_message(
+        message,
+        bot_message_id,
+        _("auth.auth_started"),
+        None,
+    )
+    await state.update_data(bot_message_id=bot_message_id)
 
-    if not access_token:
-        await message.answer(
-            _("auth.failed"),
-            reply_markup=get_cancel_keyboard(),
+    # Выполняем авторизацию через сервис
+    try:
+        success, __ = await handle_auth_password(
+            user_id=message.from_user.id,
+            login=login,
+            password=password,
+            session=session,
         )
+    except EduUnavailableError:
+        bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
+            _("auth.unavailable"),
+            get_cancel_inline_keyboard(),
+        )
+        await state.update_data(bot_message_id=bot_message_id)
+        await state.set_state(FormAuth.password)
+        return
 
+    if not success:
+        bot_message_id = await edit_bot_message(
+            message,
+            bot_message_id,
+            _("auth.failed"),
+            get_cancel_inline_keyboard(),
+        )
+        await state.update_data(bot_message_id=bot_message_id)
         await state.set_state(FormAuth.login)
         return
 
-    await message.answer(_("auth.success"), reply_markup=ReplyKeyboardRemove())
-
-    await set_edu_credentials(session, message.from_user.id, login, password)
-
-    auth_data = await get_auth_data(access_token)
-    user_data_raw = auth_data.get("user")
-    if user_data_raw is None:
-        await message.answer(_("auth.failed"), reply_markup=ReplyKeyboardRemove())
-        await state.set_state(FormAuth.login)
-        return
-    user_data: dict[str, Any] = user_data_raw
-
-    await set_user_data(
-        session=session,
-        user_id=message.from_user.id,
-        edu_user_id=user_data.get("userID"),
-        group_id=user_data.get("groupID"),
-        group_name=user_data.get("group"),
-        full_name=user_data.get("fio"),
-        is_authenticated=True,
+    # Успешная авторизация
+    await edit_bot_message(
+        message,
+        bot_message_id,
+        _("auth.success"),
+        None,
     )
 
     await state.clear()

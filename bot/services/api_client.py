@@ -16,6 +16,10 @@ class ParseError(Exception):
     """Ошибка парсинга данных журнала."""
 
 
+class EduUnavailableError(Exception):
+    """edu-tpi недоступен: сеть, таймаут или неожиданный ответ."""
+
+
 async def get_fingerprint() -> str:
     """
     Получение рандомного идентификатора пользователя.

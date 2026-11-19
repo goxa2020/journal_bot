@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-02-08 01:49+0300\n"
+"POT-Creation-Date: 2026-02-08 23:27+0300\n"
 "PO-Revision-Date: 2024-01-15 12:59+0400\n"
 "Last-Translator: \n"
 "Language: ru\n"
@@ -23,37 +23,47 @@ msgstr ""
 msgid "auth.enter_login"
 msgstr "📧 Введите edu email (логин):"
 
-#: bot/handlers/callback/info.py:10 bot/keyboards/inline/menu.py:13
+#: bot/handlers/callback/info.py:10
 msgid "info button"
 msgstr "ℹ️ Информация"
 
-#: bot/handlers/message/auth.py:31 bot/keyboards/reply/__init__.py:9
+#: bot/handlers/message/auth.py:28 bot/keyboards/reply/__init__.py:9
 msgid "cancel_btn"
 msgstr "❌ Отмена"
 
-#: bot/handlers/message/auth.py:41
+#: bot/handlers/message/auth.py:38
 msgid "cancelled"
 msgstr "❌ Действие отменено."
 
-#: bot/handlers/message/auth.py:53 bot/handlers/message/auth.py:61
+#: bot/handlers/message/auth.py:61
 msgid "auth.enter_login_invalid"
 msgstr "❌ Неверный формат email. Попробуйте снова:"
 
-#: bot/handlers/message/auth.py:68
-msgid "auth.enter_pass"
-msgstr "🔑 Введите edu пароль:"
+#: bot/handlers/message/auth.py:73
+msgid "auth.enter_pass_with_login"
+msgstr ""
+"📧 Логин: {login}\n"
+"🔑 Введите edu пароль:"
 
-#: bot/handlers/message/auth.py:85 bot/handlers/message/auth.py:93
+#: bot/handlers/message/auth.py:99
 msgid "auth.enter_pass_invalid"
 msgstr "❌ Пароль не может быть пустым. Попробуйте снова:"
 
-#: bot/handlers/message/auth.py:105
+#: bot/handlers/message/auth.py:112
+msgid "auth.auth_started"
+msgstr "⏳ Авторизация запущена..."
+
+#: bot/handlers/message/auth.py:129
 msgid "auth.failed"
 msgstr "❌ Логин или пароль неверны. Попробуйте снова:"
 
-#: bot/handlers/message/auth.py:111
+#: bot/handlers/message/auth.py:132
+msgid "auth.unavailable"
+msgstr "⚠️ Сервис журнала недоступен. Попробуйте ещё раз:"
+
+#: bot/handlers/message/auth.py:140
 msgid "auth.success"
-msgstr "✅ Авторизация успешна! Синхронизация запущена..."
+msgstr "✅ Авторизация успешна!"
 
 #: bot/handlers/message/export_users.py:29
 msgid "user counter"
@@ -63,23 +73,23 @@ msgstr "кол-во пользователей: <b>{count}</b>"
 msgid "about"
 msgstr "ℹ️ <b>Это всего лишь шаблон бота</b>"
 
-#: bot/handlers/message/start.py:14
+#: bot/handlers/message/start.py:15
 msgid "welcome_back_1"
 msgstr "Давно не виделись! 😊"
 
-#: bot/handlers/message/start.py:15
+#: bot/handlers/message/start.py:16
 msgid "welcome_back_2"
 msgstr "Рад тебя снова видеть! 👋"
 
-#: bot/handlers/message/start.py:16
+#: bot/handlers/message/start.py:17
 msgid "welcome_back_3"
 msgstr "Привет еще раз! 🌟"
 
-#: bot/handlers/message/start.py:17
+#: bot/handlers/message/start.py:18
 msgid "welcome_back_4"
 msgstr "С возвращением! 😄"
 
-#: bot/handlers/message/start.py:33
+#: bot/handlers/message/start.py:34 bot/utils/main_menu.py:15
 msgid "first message"
 msgstr ""
 "👋 Привет! Я бот для электронного журнала edu-tpi.\n"
@@ -89,16 +99,6 @@ msgstr ""
 "🔔 Уведомлять о новых оценках\n"
 "📈 Анализировать твою успеваемость\n"
 "📥 Экспортировать данные\n"
-
-#: bot/handlers/message/start.py:38 bot/utils/main_menu.py:16
-msgid "last_grade"
-msgstr ""
-"Последняя полученая оценка:\n"
-"{} по предмету \"{}\" за {}"
-
-#: bot/handlers/message/start.py:38 bot/utils/main_menu.py:16
-msgid "last_grade.none"
-msgstr "Оценки не найдены"
 
 #: bot/handlers/message/support.py:13
 msgid "support text"
@@ -112,37 +112,50 @@ msgstr "Написать"
 msgid "back button"
 msgstr "🔙 Назад"
 
-#: bot/keyboards/inline/menu.py:18
+#: bot/keyboards/inline/menu.py:16
 msgid "menu.grades_btn"
 msgstr "📊 Оценки"
 
-#: bot/keyboards/inline/menu.py:19
+#: bot/keyboards/inline/menu.py:17
 msgid "menu.stats_btn"
 msgstr "📊 Статистика"
 
-#: bot/keyboards/inline/menu.py:21
+#: bot/keyboards/inline/menu.py:19
 msgid "menu.watch_btn"
 msgstr "👁 Режим ожидания"
 
-#: bot/keyboards/inline/menu.py:22
+#: bot/keyboards/inline/menu.py:20
 msgid "menu.settings_btn"
 msgstr "⚙️ Настройки"
 
-#: bot/keyboards/inline/menu.py:24
+#: bot/keyboards/inline/menu.py:22
 msgid "menu.export_btn"
 msgstr "📥 Экспорт"
 
-#: bot/keyboards/inline/menu.py:25 bot/keyboards/inline/menu.py:30
+#: bot/keyboards/inline/menu.py:23 bot/keyboards/inline/menu.py:28
 msgid "menu.help_btn"
 msgstr "ℹ️ Помощь"
 
-#: bot/keyboards/inline/menu.py:27
+#: bot/keyboards/inline/menu.py:25
 msgid "menu.update_btn"
 msgstr "🔄 Обновить"
 
-#: bot/keyboards/inline/menu.py:29
+#: bot/keyboards/inline/menu.py:27
 msgid "menu.auth_btn"
 msgstr "🔑 Войти"
 
+#: bot/utils/main_menu.py:14
+msgid "last_grade"
+msgstr ""
+"Последняя полученая оценка:\n"
+"{} по предмету \"{}\" за {}"
+
+#: bot/utils/main_menu.py:14
+msgid "last_grade.none"
+msgstr "Оценки не найдены"
+
 #~ msgid "bot started"
 #~ msgstr "Бот запущен!"
+
+#~ msgid "auth.enter_pass"
+#~ msgstr "🔑 Введите edu пароль:"

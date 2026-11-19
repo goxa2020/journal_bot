@@ -1,8 +1,10 @@
 from __future__ import annotations
 import asyncio
+import sys
+from typing import TYPE_CHECKING
 
 import sentry_sdk
-import uvloop
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp.web import AppRunner, TCPSite
 from loguru import logger
@@ -16,6 +18,10 @@ from bot.keyboards.default_commands import remove_default_commands, set_default_
 from bot.middlewares import register_middlewares
 from bot.middlewares.prometheus import prometheus_middleware_factory
 from bot.services.admins import send_to_admins
+
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+    from typing import Any
 
 # from aiogram.utils.i18n import gettext as _
 
@@ -91,6 +97,33 @@ async def setup_webhook() -> None:
     await asyncio.Event().wait()
 
 
+TELEGRAM_WAIT_SECONDS = 15
+
+
+async def wait_for_telegram() -> None:
+    """Ждёт доступности Bot API, а не падает в рестарт-цикл.
+
+    Без VPN/прокси контейнер не достучится до Telegram; ждём и пишем понятную
+    причину, чтобы после включения VPN бот поднялся сам.
+    """
+    attempt = 0
+    while True:
+        try:
+            await bot.get_me(request_timeout=10)
+        except TelegramNetworkError as exc:  # noqa: PERF203 — это retry-цикл
+            attempt += 1
+            logger.warning(
+                "Telegram недоступен ({}): {} | проверьте VPN и TELEGRAM_PROXY={} | попытка {}",
+                type(exc).__name__,
+                exc,
+                settings.TELEGRAM_PROXY or "не задан",
+                attempt,
+            )
+            await asyncio.sleep(TELEGRAM_WAIT_SECONDS)
+        else:
+            return
+
+
 async def main() -> None:
     if settings.SENTRY_DSN:
         sentry_loguru = LoguruIntegration(
@@ -113,6 +146,8 @@ async def main() -> None:
         compression="zip",
     )
 
+    await wait_for_telegram()
+
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
@@ -122,5 +157,16 @@ async def main() -> None:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
+def _run(entrypoint: Coroutine[Any, Any, None]) -> None:
+    """Запускает приложение: uvloop на Linux/macOS, обычный loop на Windows."""
+    if sys.platform == "win32":  # uvloop не поддерживается
+        asyncio.run(entrypoint)
+        return
+
+    import uvloop  # noqa: PLC0415 — нужен только вне Windows
+
+    uvloop.run(entrypoint)
+
+
 if __name__ == "__main__":
-    uvloop.run(main())
+    _run(main())

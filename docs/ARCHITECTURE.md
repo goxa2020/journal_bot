@@ -1,0 +1,661 @@
+# Архитектура Journal Bot
+
+**Версия:** 2.0 · **Дата:** 18.11.2026 · **Статус:** целевая архитектура; часть ещё не реализована
+**Область:** Telegram-бот доступа к электронному журналу `edu-tpi.donstu.ru`
+
+Документ описывает, как система должна быть устроена. Текущее состояние кода и порядок работ —
+в [ROADMAP.md](ROADMAP.md). Спецификация внешнего API — в [API.md](API.md). Команды разработки —
+в [DEVELOPMENT.md](DEVELOPMENT.md).
+
+---
+
+## 1. Контекст и цели
+
+### Задача
+
+Студент ДГТУ получает в Telegram то, ради чего иначе открывает веб-журнал: свои оценки,
+посещаемость, средний балл и уведомления о новых оценках.
+
+### Акторы
+
+| Актор | Что делает | Ограничения |
+|---|---|---|
+| Студент | Авторизуется, смотрит оценки, включает уведомления | Одна учётная запись edu-tpi на Telegram-аккаунт |
+| Администратор | Смотрит пользователей, логи синхронизаций, чинит залипших | Веб-панель, роль `superuser` |
+| edu-tpi API | Источник данных | Неофициально используемый API, лимитов не публикует, схема может меняться |
+| Telegram Bot API | Канал доставки | 30 сообщений/сек суммарно, 1 сообщение/сек в один чат |
+
+### Целевые показатели
+
+| Параметр | Значение |
+|---|---|
+| Пользователей | 100–300 (пик — начало сессии) |
+| Ответ бота на команду | < 300 мс, независимо от синхронизации |
+| Синхронизация одного пользователя | 3–10 с в фоне |
+| Запросов к edu-tpi | ~1 на журнал на группу, а не на студента |
+| Частота плановой синхронизации | каждые 6 часов |
+| Частота режима ожидания | каждые 5 минут, не более 30 минут подряд |
+
+### Не цели
+
+- Замена веб-журнала: бот только читает.
+- Хранение пароля в открытом виде, восстановление пароля, доступ к чужим оценкам.
+- Мобильное/веб-приложение, API для третьих сторон.
+
+---
+
+## 2. Компоненты и топология
+
+```
+                    ┌──────────────────────────┐
+   Telegram  ──────▶│  bot (aiogram 3)         │
+                    │  handlers · FSM · i18n   │──┐
+                    └──────────┬───────────────┘  │ enqueue
+                               │ SQL              │
+                    ┌──────────▼───────────────┐  │
+                    │ pgbouncer ──▶ PostgreSQL │  │
+                    └──────────▲───────────────┘  │
+                               │ SQL              │
+                    ┌──────────┴───────────────┐  │
+                    │ worker (Celery)          │◀─┘
+                    │ sync · notify · service  │
+                    └──────────┬───────────────┘
+                               │ HTTPS
+                    ┌──────────▼───────────────┐
+                    │ edu-tpi API              │
+                    └──────────────────────────┘
+
+  Redis: db0 — FSM + кеш + токены + лимиты
+         db1 — брокер Celery
+         db2 — результаты Celery
+  beat (Celery beat) ──▶ расписание задач
+  flower ──▶ UI мониторинга очередей
+  admin (Flask-Admin) ──▶ PostgreSQL (свои таблицы admin/role)
+  prometheus · grafana · node-exporter ──▶ метрики
+```
+
+| Компонент | Технология | Ответственность | Состояние |
+|---|---|---|---|
+| `bot` | aiogram 3.24, aiohttp | Приём апдейтов, FSM, клавиатуры, тексты, постановка задач | Работает частично |
+| `worker` | Celery | Синхронизация, уведомления, обслуживание | Не реализован |
+| `beat` | Celery beat | Расписание периодических задач | Не реализован |
+| `flower` | Flower | UI очередей и задач | Не реализован |
+| `admin` | Flask-Admin + Flask-Security | Просмотр и правка пользователей, журналов, логов | Работает, 1 экран |
+| `postgres` | PostgreSQL 14 | Постоянные данные | Работает |
+| `migrator` | Alembic | Применение миграций при старте compose | Работает (завершается) |
+| `pgbouncer` | edoburu/pgbouncer | Пул соединений к PostgreSQL | Работает |
+| `redis` | Redis 7 | FSM, кеш, токены, брокер и backend Celery | Работает (брокер ещё не используется) |
+| `prometheus`/`grafana` | v2.43 / 8.5 | Метрики, дашборды | Prometheus есть, дашбордов бота нет |
+| `pgbackup` | postgres-backup-local | Бэкапы раз в 30 минут | Работает |
+
+### Правила взаимодействия компонентов
+
+1. **`bot` не выполняет сетевые вызовы edu-tpi.** Любой вызов журнала — только из `worker`.
+   Исключение на переходный период: вход (`tokenauth`), потому что пользователь ждёт ответ.
+2. **`bot` не блокируется.** Всё, что дольше ~1 с, уходит в задачу.
+3. **`worker` общается с Telegram сам** — отдельным экземпляром `Bot`, а не через процесс `bot`.
+4. **Единственный источник истины — PostgreSQL.** Redis полностью восстановим.
+5. **Обе стороны используют один `bot/core/config.py`** и один `.env`.
+
+### Локальная сеть
+
+Docker не наследует системный прокси хоста, поэтому Bot API может быть недоступен из
+контейнера, даже если на хосте Telegram открывается. Решение — `TELEGRAM_PROXY`
+(`http://host.docker.internal:10809`): бот создаёт `AiohttpSession(proxy=...)`, а воркер при
+создании своего `Bot` (задача 1.6) обязан использовать ту же настройку. edu-tpi ходит напрямую —
+это другой домен и обычно другой маршрут.
+
+---
+
+## 3. Слои кода и правила зависимостей
+
+```
+handlers/ keyboards/ filters/          интерфейс: разбор апдейта, тексты, кнопки
+        │  (только вызов сервисов)
+services/                              прикладные сценарии, транзакции, политика
+        │
+integrations/ (api_client, journal_parser)   внешний мир
+        │
+database/ (models, repositories)       доступ к данным
+        │
+core/ (config, loader, cache)          инфраструктура
+```
+
+| Слой | Что можно | Что нельзя |
+|---|---|---|
+| `handlers/` | Вызывать сервисы, форматировать ответ, менять FSM | SQL-запросы, `aiohttp`, бизнес-правила |
+| `services/` | Оркестрировать шаги, коммитить транзакции, решать «уведомлять или нет» | Знать про `Message`/`CallbackQuery`, строить клавиатуры |
+| `integrations/` | HTTP, парсинг, кеш сырых ответов | Знать про БД и Telegram |
+| `database/` | Запросы и модели | HTTP, Telegram, форматирование |
+| `core/` | Настройки, подключения, обёртки | Прикладная логика |
+
+Текущие отклонения, которые нужно устранить (см. ROADMAP, фаза 0–2):
+
+- [bot/services/auth.py](../bot/services/auth.py) одновременно ходит в HTTP, шифрует пароль,
+  пишет в Redis и в БД, и там же живёт правка сообщений Telegram (`edit_bot_message`).
+  Целевое: `AuthService` (данные) + `handler` (сообщения).
+- [bot/handlers/message/auth.py](../bot/handlers/message/auth.py) содержит правила валидации
+  логина — это сервис.
+- `bot/services/journals.py`, `bot/services/sync_logs.py` написаны под старую схему «предметов»
+  и не импортируются ниоткуда — либо переписать, либо удалить.
+
+### Целевая структура каталогов
+
+```
+bot/
+├── __main__.py            запуск бота (polling/webhook)
+├── celery_app.py          приложение Celery + маршрутизация задач      [нет]
+├── celery_config.py       параметры Celery                            [нет]
+├── tasks/                 celery-задачи                                [нет]
+│   ├── sync.py            sync_user_*, sync_all_users
+│   ├── notify.py          send_*_notification
+│   └── service.py         cleanup_*, collect_metrics
+├── core/                  config, loader, cache, encryption
+├── database/              engine, models, repositories
+├── integrations/          edu-tpi клиент и парсер                      [частично: services/]
+├── services/              auth, grade_sync, notification, statistics, export
+├── handlers/              message/, callback/
+├── keyboards/             inline/, reply/
+├── middlewares/           auth, database, i18n, throttling, logging
+├── locales/               ru/en
+└── utils/                 форматирование, меню, команды
+```
+
+---
+
+## 4. Данные
+
+### 4.1 PostgreSQL
+
+Схема на текущий момент (миграция `217e8389fd0e` — голова).
+
+**`users`** — один Telegram-пользователь.
+
+| Поле | Тип | Назначение |
+|---|---|---|
+| `id` | BIGINT PK | Telegram user id |
+| `language_code` | TEXT | ru/en для i18n |
+| `edu_login_encrypted`, `edu_password_encrypted` | VARCHAR(255) | Fernet-шифр учётных данных |
+| `edu_user_id` | BIGINT | ID студента в edu-tpi (`user.userID`) |
+| `group_id`, `group_name` | BIGINT / TEXT | группа (`groupID`, `group`), ключ группового кеша |
+| `full_name` | TEXT | `fio`, краткая форма |
+| `is_authenticated` | BOOL | вход выполнен, данные можно синхронизировать |
+| `notification_enabled` | BOOL | уведомления вообще |
+| `morning_notification_enabled` | BOOL | копить ночные оценки до утра |
+| `morning_notification_time` | TIME | по умолчанию 08:00 (Europe/Moscow) |
+| `watch_mode_expires_at` | TIMESTAMP NULL | до какого времени «режим ожидания» |
+| `watch_mode_last_sync_at` | TIMESTAMP NULL | время последней синхронизации в режиме ожидания |
+| `is_admin` | BOOL | доступ к админ-командам бота |
+| `created_at`, `updated_at` | TIMESTAMP | |
+
+**`journals`** — дисциплина/журнал. PK — `id` журнала в edu-tpi.
+
+| Поле | Назначение |
+|---|---|
+| `id` | `journalID` из edu-tpi |
+| `name`, `teacher_name`, `type` | `dis`, `teacherName`, `type` (Лек/Пр/Лаб) |
+| `created_at`, `updated_at` | |
+
+**`grades`** — оценка/посещаемость одного студента на одном занятии.
+
+| Поле | Назначение |
+|---|---|
+| `id` | **требует переделки**, см. §9 |
+| `user_id` | FK → `users.id` |
+| `journal_id` | FK → `journals.id` |
+| `date` | дата занятия (DATE) |
+| `value` | отображаемое значение: `1`–`5`, `Н`, `У`, `Б`, `О`, пусто |
+| `number_value` | 1–5 для оценок, NULL иначе |
+| `is_mark`, `is_pass`, `is_valid_pass` | флаги из `journalVal` |
+| `created_at`, `updated_at` | |
+
+**`sync_logs`** — журнал синхронизаций: `user_id`, `sync_type`
+(`manual|auto|watch_mode`), `status` (`success|failed|in_progress|cancelled`),
+`new_grades_count`, `updated_grades_count`, `message`, `created_at`.
+
+**`student_journal`** — M2M `users ↔ journals` (какие журналы у пользователя есть).
+Пока не заполняется; заполняется при синхронизации (фаза 2).
+
+**Таблицы админки** `admin`, `role`, `roles_admins` создаются через `db.create_all()`
+в [admin/app.py](../admin/app.py), а не миграциями. Это осознанный компромисс: админка живёт
+отдельно от доменной схемы, но `alembic revision --autogenerate` про них не знает. Переносить
+в миграции — задача фазы 8.
+
+### 4.2 Redis
+
+Всё в базе `db0`, кроме Celery.
+
+| Ключ | Тип | TTL | Назначение |
+|---|---|---|---|
+| `fsm:*` | строки | сессия | состояние aiogram (`RedisStorage`) |
+| `main:<module>:<func>:<key>` | pickle/json | 10 с | `@cached` для `users` |
+| `auth:token:{user_id}` | JSON | до `expiresIn` минус 5 мин | `accessToken` + `expires_at`, `edu_user_id`, `group_id` |
+| `journal:{group_id}:{journal_id}` | JSON | 15 мин | разобранный журнал всей группы |
+| `journal:{group_id}:{journal_id}:sub:{hash}` | JSON | 15 мин | журнал подгруппы (`isSubGroup=true`) |
+| `journal_legend:global` | JSON | 30 дней | `journalLegend` |
+| `grade_values:global` | JSON | 30 дней | справочник `journalVal` |
+| `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя |
+| `ratelimit:{user_id}` | счётчик | 60 с | лимит апдейтов от пользователя |
+| `notifications:night:{user_id}` | list | до 09:00 | накопленные ночные оценки |
+| `notify:sent:{user_id}:{lesson_key}` | строка | 7 дней | защита от повторного уведомления |
+| `watch_mode:users` | set | чистится задачей | пользователи в режиме ожидания |
+| `api:ratelimit:edu` | счётчик | 1 с | глобальный лимит запросов к edu-tpi |
+
+Правила: значения — только JSON (pickle оставить для внутреннего кеша функций); ключи всегда
+строятся `build_key()`; TTL обязателен — единственное исключение `watch_mode:users`, которое
+чистится задачей `cleanup_expired_watch_mode`, а не временем жизни ключа.
+
+### 4.3 Что не хранится
+
+- `accessToken` в PostgreSQL — только Redis, восстанавливается повторным входом.
+- Сырые ответы API — только в кеше журналов, с TTL.
+- Пароль в открытом виде — нигде, ни в логах, ни в Redis, ни в Sentry.
+
+---
+
+## 5. Интеграция edu-tpi
+
+### 5.1 Клиент
+
+Модуль `bot/integrations/edu_tpi.py` (сейчас — [bot/services/api_client.py](../bot/services/api_client.py)
+и [bot/services/journal_parser.py](../bot/services/journal_parser.py), их нужно слить):
+
+```python
+class EduTpiClient:
+    async def get_fingerprint() -> str
+    async def authorize(login, password) -> TokenInfo      # accessToken, expiresIn(мин), id
+    async def get_user_info(token) -> EduUser              # userID, groupID, group, fio, fullName
+    async def list_journals(token, year, sem) -> list[JournalBrief]
+    async def get_journal(token, journal_id) -> JournalPayload
+```
+
+Правила:
+
+- Один `aiohttp.ClientSession` на задачу, `timeout=60`, `raise_for_status` заменяется явной
+  обработкой кодов (§10).
+- Каждый вызов журнала — с задержкой ≥ 1 с от предыдущего в рамках токена.
+- 401 — токен недействителен: сбросить `auth:token:*`, один раз переавторизоваться по
+  сохранённым шифрованным данным, при повторном 401 — попросить пользователя войти заново.
+- Учебный год: с сентября `YYYY-(YYYY+1)`, иначе `(YYYY-1)-YYYY`; запрашиваются оба семестра.
+- Ответы кешируются: `journal_legend`, `grade_values`, `journal:*`.
+
+### 5.2 Подгруппы
+
+`journalData` содержит оценки не всей группы, а подгруппы студента, если `isSubGroup=true`.
+Кеш журнала поэтому хранит список `student_ids`:
+
+1. Ищем `journal:{group_id}:{journal_id}`; если студент есть в `student_ids` — берём оттуда.
+2. Иначе запрашиваем журнал токеном этого студента.
+3. Если `isSubGroup=false` — ключ `...:{journal_id}`; если `true` —
+   `...:{journal_id}:sub:{md5(sorted(student_ids))[:8]}`.
+4. Сохраняем `{is_subgroup, synced_at, journal_name, student_ids, grades}`.
+
+Эффект: 1 запрос на журнал без подгрупп и по 1 на подгруппу вместо запроса на каждого студента.
+
+### 5.3 Ограничения и деградация
+
+- Лимит edu-tpi неизвестен → держим 1 req/s на токен и 5 req/s суммарно (Redis-счётчик).
+- При 429/5xx — retry с backoff, задача не падает сразу.
+- Схема ответа может измениться → жёсткая валидация структуры и `ParseError`, а не «тихий»
+  пропуск: лучше алерт админу, чем пустые оценки у всех.
+
+---
+
+## 6. Celery
+
+### 6.1 Приложение и брокер
+
+| Параметр | Значение |
+|---|---|
+| Имя | `journal_bot` |
+| Broker | `redis://redis:6379/1` |
+| Result backend | `redis://redis:6379/2` |
+| Сериализация | JSON, `accept_content=["json"]` |
+| Часовой пояс | `Europe/Moscow`, `enable_utc=True` |
+| `task_acks_late` | `True` — задача подтверждается после выполнения |
+| `task_reject_on_worker_lost` | `True` |
+| `worker_prefetch_multiplier` | `1` |
+| `task_time_limit` / `soft` | 300 / 250 с |
+| `worker_max_tasks_per_child` | 1000 |
+| `broker_connection_retry_on_startup` | `True` |
+
+Файлы: `bot/celery_app.py` (создание, `include`, `task_routes`, `beat_schedule`),
+`bot/celery_config.py` (константы, читаются из `CelerySettings`).
+
+### 6.2 Очереди и приоритеты
+
+| Очередь | Задачи | Воркер | Смысл |
+|---|---|---|---|
+| `sync` | `sync_user_manual`, `sync_user_after_login`, `sync_watch_mode_users` | `worker-sync` (concurrency 2) | пользователь ждёт, важно быстро |
+| `notify` | `send_grade_notification`, `send_night_batch` | `worker-notify` (concurrency 4) | лёгкие вызовы Bot API, `eta` |
+| `maintenance` | `sync_all_users`, `cleanup_*`, `collect_metrics`, дайджест | `worker-maintenance` (concurrency 1) | фоновое, может ждать |
+
+Приоритеты Celery в Redis (`priority`) включаются `task_queue_max_priority=10`;
+для MVP достаточно разделения по очередям — приоритеты внутри очереди включаются, если
+появится заметная очередь.
+
+### 6.3 Каталог задач
+
+| Задача | Аргументы | Что делает | Retry |
+|---|---|---|---|
+| `sync_user_manual` | `user_id` | Синхронизация по кнопке; по завершении — сообщение пользователю | 3, backoff 60→240 с |
+| `sync_user_after_login` | `user_id` | Первая синхронизация после входа, без сообщения об успехе | 3 |
+| `sync_watch_mode_users` | — | Все пользователи с `watch_mode_expires_at > now()` | — |
+| `sync_all_users` | — | Групповая синхронизация по расписанию | — |
+| `send_grade_notification` | `user_id`, `lesson_keys` | Немедленное уведомление (день) | 2 |
+| `send_night_batch` | `user_id` | Отправка накопленного ночного списка (`eta` = утро) | 2 |
+| `cleanup_expired_watch_mode` | — | Сброс истёкшего режима ожидания | — |
+| `cleanup_old_logs` | `days=30` | Чистка `sync_logs` | — |
+| `collect_metrics` | — | Обновление gauge-метрик | — |
+| `send_monthly_digest` | `user_id` \| — | Дайджест (после MVP) | 1 |
+
+Все задачи принимают только примитивы (id, строки) — никаких ORM-объектов в очереди.
+
+### 6.4 Расписание beat
+
+| Задача | Когда | Комментарий |
+|---|---|---|
+| `sync_all_users` | `crontab(minute=0, hour="*/6")` | 00, 06, 12, 18 МСК |
+| `sync_watch_mode_users` | `crontab(minute="*/5")` | каждые 5 минут |
+| `cleanup_expired_watch_mode` | `crontab(minute=10)` | каждый час |
+| `cleanup_old_logs` | `crontab(minute=0, hour=3, day_of_month="*/2")` | раз в 2 дня |
+| `collect_metrics` | `crontab(minute=5)` | каждый час |
+| `send_monthly_digest` | `crontab(minute=0, hour=12, day_of_month=31)` | после MVP |
+
+### 6.5 Мост sync/async
+
+Celery-задачи синхронные, приложение — асинхронное. Правило:
+
+```python
+# bot/tasks/base.py
+def run_async(coro):
+    return asyncio.run(coro)          # один event loop на задачу
+```
+
+Внутри задачи:
+
+```python
+@celery_app.task(bind=True, ...)
+def sync_user_manual(self, user_id: int) -> None:
+    run_async(_sync_user_manual(user_id))
+```
+
+В `_sync_user_manual` создаётся **своя** сессия, а не глобальный `engine` из
+[bot/database/database.py](../bot/database/database.py):
+
+```python
+@asynccontextmanager
+async def task_session():
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    try:
+        async with get_sessionmaker(engine)() as session:
+            yield session
+    finally:
+        await engine.dispose()
+```
+
+Причины: asyncpg-соединения привязаны к event loop, а `asyncio.run` создаёт новый loop
+на каждую задачу; `NullPool` + `dispose()` исключают переиспользование «чужого» соединения.
+Существующий `get_engine()` с `pool_size=0` даёт **QueuePool без ограничения размера**
+(проверено на SQLAlchemy 2.0), а не `NullPool`, поэтому для задач нужен явный `poolclass`.
+Глобальный `engine` остаётся только для процесса бота.
+
+Telegram из воркера:
+
+```python
+async with Bot(settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=HTML)) as bot:
+    await bot.send_message(chat_id, text)
+```
+
+`Bot` создаётся и закрывается внутри задачи — держать глобальный инстанс нельзя
+(соединения aiohttp снова привязаны к loop).
+
+### 6.6 Идемпотентность и повторы
+
+- `acks_late=True` означает возможный повторный запуск после падения воркера → все задачи
+  обязаны быть идемпотентными.
+- `sync_user_*` берут `sync:lock:{user_id}` (SET NX EX 300); не взяли — задача выходит без
+  ошибки, в лог `sync skipped: locked`.
+- Вставка оценок — `INSERT ... ON CONFLICT (user_id, journal_id, date, hour_number) DO UPDATE`
+  (после миграции §9).
+- Уведомления дедуплицируются `notify:sent:{user_id}:{lesson_key}` (SET NX EX 7 дней);
+  маркер ставится до отправки и удаляется, если отправка не удалась.
+- Ошибки делятся на `RetryableError` (сеть, 5xx, 429) и `PermanentError` (неверные данные,
+  схема): первые — `self.retry`, вторые — лог, `sync_logs.status=failed`, уведомление админу.
+
+---
+
+## 7. Потоки
+
+### 7.1 Авторизация
+
+```
+/start → inline «Войти» → FSM: логин → пароль
+   → AuthService.authorize(login, password)
+        fingerprint → POST tokenauth → accessToken, expiresIn
+        GET tokenauth(Bearer) → user{userID, groupID, group, fio}
+        Fernet → users.edu_login_encrypted / edu_password_encrypted
+        Redis auth:token:{user_id} (TTL = expiresIn*60 − 300)
+   → сообщение «Авторизация успешна»
+   → sync_user_after_login.delay(user_id)
+   → главное меню с реальной последней оценкой
+```
+
+Сообщения бота редактируются на месте (`edit_bot_message`), сообщения пользователя удаляются —
+секретный ввод не остаётся в чате. Отмена — inline-кнопкой: reply-клавиатуру нельзя прикрепить
+к `edit_message_text`, поэтому в шагах авторизации используется `get_cancel_inline_keyboard()`.
+Неверные учётные данные, недоступность edu-tpi и истечение токена различаются в ответах
+пользователю (см. §9).
+
+### 7.2 Ручная синхронизация
+
+```
+кнопка «Обновить»/ /sync
+   → sync_user_manual.delay(user_id)          (400 мс)
+   → «⏳ Синхронизация запущена…»
+worker:
+   lock → AuthService.get_token(user_id)      (Redis или переавторизация)
+   → list_journals(оба семестра)
+   → для каждого журнала: get_journal через кеш группы/подгруппы
+   → diff с БД → upsert grades → sync_logs
+   → новые оценки? → NotificationService
+   → сообщение «📊 Синхронизировано: N новых оценок» / «Изменений нет»
+```
+
+### 7.3 Плановая синхронизация групп
+
+```
+beat 6ч → sync_all_users
+   users с is_authenticated → group_by(group_id)
+   для группы:
+       unprocessed = {edu_user_id участников}
+       while unprocessed:
+           студент = любой из unprocessed
+           журналы = list_journals(его токен)
+           для журнала: get_journal (1 запрос на группу/подгруппу)
+               парсим всех студентов
+               для каждого пользователя бота из ответа:
+                   diff → upsert → уведомления
+               unprocessed -= {студенты из ответа}
+```
+
+Оппортунистическая часть (сохранение оценок других участников группы) — после MVP:
+она даёт свежие данные тем, кто не запускал синхронизацию, но повышает риск ложных
+уведомлений, поэтому включается флагом `SYNC_OPPORTUNISTIC=true`.
+
+### 7.4 Уведомления
+
+```
+новая оценка → NotificationService.notify(user_id, grades)
+   notification_enabled? нет → выходим
+   сейчас 22:00–08:00 и morning_notification_enabled?
+       да  → RPUSH notifications:night:{user_id}, EXPIRE до 09:00
+              send_night_batch.apply_async(eta=ближайшее morning_notification_time)
+       нет → send_grade_notification.delay(user_id, lesson_keys)
+   TelegramForbidden → notification_enabled=False, лог
+```
+
+Утренняя задача собирает список из Redis, склеивает в одно сообщение (дата, предмет, оценка),
+чистит ключ. Одна оценка — одно сообщение, много — список; никаких «пинг-понгов» по одной.
+
+### 7.5 Режим ожидания (после MVP)
+
+```
+кнопка «Режим ожидания» → watch_mode_expires_at = now()+30 мин, SADD watch_mode:users
+beat 5 мин → sync_watch_mode_users → только эти пользователи, priority 5
+beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
+интерфейс показывает остаток времени, продление продлевает на 30 минут
+```
+
+---
+
+## 8. Ключ урока и диф оценок
+
+Проблема текущей схемы: `grades.id` объявлен первичным ключом и по исходному проекту равен
+`dateID` занятия из edu-tpi. `dateID` один и тот же для всех студентов группы, поэтому
+вторая запись по тому же занятию другого пользователя нарушит PK. Синхронизация на этой схеме
+работать не может.
+
+Целевая схема (миграция фазы 2):
+
+| Изменение | Детали |
+|---|---|
+| `grades.id` | `BIGSERIAL` — суррогатный PK |
+| `edu_lesson_id` | BIGINT — `dateID`, информационное поле |
+| `hour_number` | SMALLINT — номер пары, часть ключа |
+| Уникальность | `UNIQUE (user_id, journal_id, date, hour_number)` |
+| Индексы | `(user_id, journal_id, date)` для экранов, `(journal_id)` для массовой синхронизации |
+
+Диф: загружаем существующие `(date, hour_number) → value` по журналу, сравниваем с пришедшими;
+новые — вставка, изменённые (преподаватель исправил оценку) — обновление с `updated_at`,
+удалённые — не удаляем, а помечаем `is_deleted` только если появится требование.
+
+Значение из `journalVal.value` приходит с хвостовыми пробелами (`"Н  "`) — **`strip()` перед
+сохранением обязателен**, иначе сравнение «новое/старое» всегда истинно и уведомления
+превращаются в спам.
+
+---
+
+## 9. Ошибки и реакция
+
+| Ситуация | Исключение | Реакция | Пользователю |
+|---|---|---|---|
+| Неверный логин/пароль | `EduAuthError` | Без retry, `is_authenticated=False` | «❌ Логин или пароль неверны» |
+| Токен истёк | `EduTokenExpired` | Переавторизация по сохранённым данным | — |
+| 401 после переавторизации | `EduAuthError` | Сброс токена | «Войдите заново: /start» |
+| 5xx, таймаут | `EduUnavailableError` | Retry 3× (60/120/240 с) | «⚠️ Журнал недоступен, попробуйте позже» |
+| 429 | `EduRateLimitError` | Retry с большей паузой | — |
+| Изменилась схема ответа | `ParseError` | Без retry, лог + алерт админу | «⚠️ Не удалось разобрать журнал» |
+| Telegram: бот заблокирован | `TelegramForbidden` | `notification_enabled=False` | — |
+| Telegram: 429 | `TelegramRetryAfter` | `sleep(retry_after)`, повтор | — |
+| Нет `ENCRYPTION_KEY` | `ConfigError` | Падение на старте | — |
+
+Все исключения — в `bot/core/errors.py`, иерархия от `AppError`. В логах и Sentry — без
+логина, пароля и токена.
+
+---
+
+## 10. Безопасность
+
+| Аспект | Решение |
+|---|---|
+| Учётные данные edu-tpi | Fernet (AES-128-CBC + HMAC), ключ в `ENCRYPTION_KEY`, только в `.env` |
+| Ключ шифрования | Обязателен, валидируется на старте; без ключа бот не запускается. Сейчас при отсутствии генерируется случайный — это ломает расшифровку после рестарта |
+| Пароль в чате | Сообщение пользователя удаляется сразу после чтения, пароль не логируется |
+| Токен | Redis с TTL, не попадает в БД и логи |
+| Rate limit бота | Redis-счётчик на пользователя, 30 апдейтов/мин (+ текущий TTLCache как быстрый слой) |
+| Админка | Flask-Security, пароль хэшируется, доступ по роли `superuser`, дефолтный пароль менять при первом запуске |
+| Секреты в репозитории | `.env` в `.gitignore`; в `.env.example` только плейсхолдеры |
+| Логи | `sync_logs.message` не содержит ПДн; Sentry `send_default_pii=False` |
+| Ротация ключа | Не в MVP: смена `ENCRYPTION_KEY` потребует повторного входа всех пользователей |
+
+---
+
+## 11. Наблюдаемость
+
+**Метрики.** Сейчас в [bot/middlewares/prometheus.py](../bot/middlewares/prometheus.py) есть
+только HTTP-метрики aiohttp-сервера webhook (`tgbot_requests`, `tgbot_responses`,
+`tgbot_request_duration`, `tgbot_requests_in_progress`, `tgbot_exceptions`) и эндпоинт `/metrics`.
+Бизнес-метрик нет — они заводятся в фазах 2–3.
+
+Целевой набор:
+
+| Метрика | Тип | Метки |
+|---|---|---|
+| `bot_updates_total` | Counter | `type` (message/callback) |
+| `bot_commands_total` | Counter | `command` |
+| `bot_handler_duration_seconds` | Histogram | `handler` |
+| `sync_total` | Counter | `type` (manual/auto/watch), `status` |
+| `sync_duration_seconds` | Histogram | `type` |
+| `sync_new_grades` | Counter | `type` |
+| `notifications_total` | Counter | `kind` (immediate/night/digest), `status` |
+| `active_users` | Gauge | `is_authenticated`, `watch_mode` |
+| `edu_requests_total` | Counter | `endpoint`, `status` |
+
+Ограничение: `/metrics` поднимается только в режиме webhook (`MetricsView` в
+[bot/__main__.py](../bot/__main__.py)). В polling нужен отдельный aiohttp-сервер метрик —
+задача 1.6.
+
+**Celery**: `celery_queue_length`, `celery_active_tasks`, `celery_task_duration_seconds`,
+`celery_tasks_total`, `celery_task_failures_total` — через `celery-prometheus-exporter`
+(контейнер `celery-exporter`), Flower — для ручного разбора. Точные имена метрик уточняются
+по выбранной версии экспортёра — их фиксируем в `configs/prometheus/` при подключении.
+
+**Логи**: loguru, `logs/telegram_bot.log` с ротацией; в воркере — `logs/worker.log`.
+Уровни: `INFO` для бизнес-событий (`sync finished user=… new=…`), `WARNING` для деградации,
+`ERROR` для постоянных ошибок, `DEBUG` — тела ответов API только при `DEBUG=true`.
+
+**Sentry**: в боте через loguru-интеграцию, в воркере — `CeleryIntegration`;
+`environment` из env, `release` из git sha.
+
+**Healthchecks**: `pgbouncer` и `redis` — есть; `worker` — `celery inspect ping`;
+`bot` — HTTP `/healthz` (после задачи 1.6).
+
+---
+
+## 12. Принятые решения
+
+| № | Решение | Альтернативы | Почему так |
+|---|---|---|---|
+| A1 | Celery + Redis worker, а не asyncio-планировщик в боте | APScheduler в процессе | Выбран владельцем проекта: ретраи, отдельные очереди, изоляция тяжёлых задач; при 300 пользователях запас по масштабированию |
+| A2 | Групповой кеш журналов + алгоритм подгрупп | Запрос на каждого студента | 1 запрос вместо 25; иначе бан по лимитам edu-tpi |
+| A3 | `asyncio.run` внутри задачи + своя сессия и `Bot` на задачу | Синхронный SQLAlchemy в воркере | Один драйвер (asyncpg) и одна модель на бота и воркер, без дублирования |
+| A4 | Суррогатный PK `grades` + `UNIQUE(user_id, journal_id, date, hour_number)` | PK = `dateID` | `dateID` общий для всех студентов и не может быть PK |
+| A5 | Разделение Redis по базам: 0 — данные, 1 — брокер, 2 — результаты | Одна база | Брокер не вытесняет кеш, `FLUSHDB` для кеша безопасен |
+| A6 | Fernet для учётных данных, ключ только в env | Хэш пароля | Пароль нужен в открытом виде для повторной авторизации в edu-tpi |
+| A7 | gettext + `.po`/`.mo`, ru по умолчанию | JSON-словари | Уже работает, стандартный инструментарий, `n_` для отложенных строк |
+| A8 | Fail-fast конфигурация | Дефолты на всё | Случайный `ENCRYPTION_KEY` и пустой `BOT_TOKEN` должны падать на старте, а не через неделю |
+| A9 | `acks_late` + идемпотентность задач | `acks_early` | Не терять задачи при падении воркера; цена — возможно повторное выполнение |
+| A10 | Ночные уведомления копятся в Redis до утра | Задача с `eta` на каждую оценку | Один пользователь — одно сообщение утром, меньше шума и вызовов API |
+| A11 | Админка отдельными таблицами (`admin`, `role`) вне миграций | Единая схема | Меньше связности; цена — `autogenerate` их не видит (документировано) |
+
+---
+
+## 13. Ограничения и риски
+
+| Риск | Влияние | Смягчение |
+|---|---|---|
+| edu-tpi меняет схему ответа | Оценки перестают обновляться | Валидация + `ParseError` + алерт; контрактные тесты на фикстурах |
+| Бан по IP/аккаунту за частые запросы | Полная остановка синхронизации | Глобальный лимит, групповой кеш, backoff, ручное включение массовой синхронизации |
+| Неофициальный API | Возможны блокировки без предупреждения | Не хранить ничего лишнего, честный disclaimer, быстрый откат |
+| Один `worker` на всё | Долгая очередь в пик | Очереди по типам, увеличение concurrency, вынос `maintenance` на ночь |
+| `acks_late` + дубликаты задач | Двойные уведомления | Дедуп `notify:sent:*`, upsert оценок, lock на пользователя |
+| Пароли в БД | Утечка БД = утечка паролей | Fernet; ключ хранится отдельно от бэкапа БД, оба — вне git |
+| Админка с дефолтным паролем | Захват панели | Принудительная смена при первом входе (задача фазы 8) |
+| `ENCRYPTION_KEY` потерян | Все пароли нерасшифровываемы | Ключ в бэкапе, документированная процедура восстановления (повторный вход) |
+
+---
+
+## 14. Что нужно изменить в коде
+
+Полный список — [ROADMAP.md](ROADMAP.md). Архитектурно значимое:
+
+1. **Фаза 0.** Ключ `accessToken` и перевод `expiresIn` из минут в секунды; валидация
+   конфигурации на старте (Fernet-ключ, часовой пояс); ключи кеша от `user_id`, а не от объекта
+   сессии; удаление/переписывание `journals.py` и `sync_logs.py`; `uvloop` только на Linux.
+2. **Фаза 1.** `celery_app.py`, `tasks/`, сервисы в compose, мост sync/async, `/healthz`.
+3. **Фаза 2.** Слияние `api_client` и `journal_parser` в `integrations/edu_tpi.py`;
+   `GradeSyncService`; миграция `grades`; экраны оценок.
+4. **Фаза 3.** `NotificationService` и политика «ночь → утро».
+
+После этого код соответствует этой схеме, и документ можно перевести в статус «реализовано».
