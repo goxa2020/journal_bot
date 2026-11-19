@@ -53,6 +53,32 @@ compose-exec +args:
 logs +args='':
     docker compose logs {{args}} -f
 
+# --- CELERY ---
+
+# Поднять Celery worker (все очереди: sync, notify, maintenance)
+worker:
+    docker compose up -d worker
+
+# Поднять Celery beat (расписание; пока пустое — фазы 3+)
+beat:
+    docker compose up -d beat
+
+# Логи worker и beat
+worker-logs:
+    docker compose logs worker beat -f
+
+# Проверить, что worker отвечает (pong)
+celery-ping:
+    docker compose exec worker celery -A bot.celery_app inspect ping
+
+# Локальный worker без Docker (нужен .env.local, см. docs/DEVELOPMENT.md §10).
+# just экспортирует переменные .env (set dotenv-load + set export), а pydantic-settings
+# ставит переменные окружения выше .env.local — поэтому убираем их, иначе worker пойдёт
+# на redis:6379 вместо опубликованного 127.0.0.1:6380.
+# --pool=solo: prefork-пул Celery на Windows не работает.
+dev-worker:
+    $env:ENV_FILE = ".env.local"; Select-String -Path .env -Pattern '^([A-Za-z_][A-Za-z0-9_]*)=' | ForEach-Object { Remove-Item "Env:$($_.Matches[0].Groups[1].Value)" -ErrorAction SilentlyContinue }; uv run celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c 1 --pool=solo
+
 # --- MIGRATIONS ---
 
 # Create new migrations (usage: just mm "message")

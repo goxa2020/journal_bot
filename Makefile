@@ -38,6 +38,27 @@ compose-exec: ## Exec command in app container
 logs:
 	docker compose logs $(args) -f
 
+# CELERY
+worker: ## Start celery worker in docker
+	docker compose up -d worker
+.PHONY: worker
+
+beat: ## Start celery beat in docker
+	docker compose up -d beat
+.PHONY: beat
+
+worker-logs: ## Follow worker and beat logs
+	docker compose logs worker beat -f
+.PHONY: worker-logs
+
+celery-ping: ## Check that the worker answers
+	docker compose exec worker celery -A bot.celery_app inspect ping
+.PHONY: celery-ping
+
+dev-worker: ## Local celery worker (needs .env.local; Windows: solo pool)
+	@env -u DB_HOST -u DB_PORT -u REDIS_HOST -u REDIS_PORT -u CELERY_BROKER_URL -u CELERY_RESULT_BACKEND ENV_FILE=.env.local uv run celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c 1 --pool=solo
+.PHONY: dev-worker
+
 # MIGRATIONS
 mm: ## Create new migrations with args name in docker compose
 	docker compose exec bot alembic revision --autogenerate -m "$(args)"

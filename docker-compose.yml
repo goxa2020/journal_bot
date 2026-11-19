@@ -27,6 +27,15 @@ services:
     networks:
       - app
       - monitoring
+    # /healthz поднимается и в polling-режиме (bot/core/health.py), поэтому healthcheck
+    # работает для обоих режимов. В alpine есть busybox wget.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${WEBHOOK_PORT}/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # импорт aiogram на медленном диске (Windows/Docker) занимает десятки секунд
+      start_period: 90s
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -34,6 +43,54 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: bot:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-worker
+    restart: always
+    # Один воркер на все очереди (MVP): sync, notify, maintenance слушает одна команда.
+    # Отдельные воркеры под очередь — не в фазе 1.
+    command: celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c ${CELERY_WORKER_CONCURRENCY:-2}
+    env_file:
+      - .env
+    networks:
+      - app
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      # $$ — чтобы compose не подставил переменную, а её раскрыл shell в контейнере.
+      # Команда импортирует celery и приложение (~8 с), под нагрузкой дольше — поэтому
+      # таймаут с запасом; старт воркера на медленном диске тоже занимает время.
+      test: ["CMD-SHELL", "celery -A bot.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+
+  beat:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: bot:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-beat
+    restart: always
+    # Расписание пустое до фазы 3: beat в этой фазе проверяется как сервис.
+    command: celery -A bot.celery_app beat -l INFO --schedule=/tmp/celerybeat-schedule
+    env_file:
+      - .env
+    networks:
+      - app
+    depends_on:
+      redis:
+        condition: service_healthy
 
   admin:
     build:
