@@ -2,11 +2,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func, select, update
 
 from bot.cache.redis import build_key, cached, clear_cache
-from bot.core.config import settings
+from bot.core.encryption import decrypt, encrypt
 from bot.database.models import User
 
 logger = logging.getLogger(__name__)
@@ -162,22 +161,14 @@ async def get_edu_credentials(session: AsyncSession, user_id: int) -> tuple[str 
     if not row or not row[0] or not row[1]:
         return None, None
 
-    fernet = Fernet(settings.ENCRYPTION_KEY.encode())
-    username = None
-    password = None
-    try:
-        username = fernet.decrypt(row[0].encode()).decode()
-        password = fernet.decrypt(row[1].encode()).decode()
-    except InvalidToken:
-        logger.warning("Failed to decrypt edu credentials for user_id=%d", user_id)
-    return username, password
+    # decrypt() логирует warning и возвращает None, если ключ сменился или токен повреждён
+    return decrypt(row[0]), decrypt(row[1])
 
 
 async def set_edu_credentials(session: AsyncSession, user_id: int, username: str, password: str) -> None:
     """Сохранить зашифрованные edu credentials пользователя."""
-    fernet = Fernet(settings.ENCRYPTION_KEY.encode())
-    username_encrypted = fernet.encrypt(username.encode()).decode()
-    password_encrypted = fernet.encrypt(password.encode()).decode()
+    username_encrypted = encrypt(username)
+    password_encrypted = encrypt(password)
 
     stmt = (
         update(User)

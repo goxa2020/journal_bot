@@ -4,8 +4,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from cryptography.fernet import Fernet
+from pydantic import ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from bot.core.encryption import validate_key
+from bot.core.errors import ConfigError
 
 if TYPE_CHECKING:
     from sqlalchemy.engine.url import URL
@@ -114,7 +117,53 @@ class Settings(BotSettings, DBSettings, CacheSettings, CelerySettings):
     AMPLITUDE_API_KEY: str | None = None
     POSTHOG_API_KEY: str | None = None
 
-    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
+    # Ключ шифрования учётных данных edu-tpi. Обязателен: случайный ключ ломает
+    # расшифровку паролей после рестарта, поэтому дефолта у поля нет.
+    ENCRYPTION_KEY: str
+
+    @field_validator("ENCRYPTION_KEY")
+    @classmethod
+    def _validate_encryption_key(cls, value: str) -> str:
+        key = value.strip()
+        validate_key(key)
+        return key
 
 
-settings = Settings()
+ENCRYPTION_KEY_MESSAGE = (
+    "ENCRYPTION_KEY не задан или не является валидным ключом Fernet. Это ключ шифрования "
+    "паролей edu-tpi: нужен 32-байтный url-safe base64 ключ, без него бот не запустится. "
+    "Сгенерировать: "
+    'uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+)
+
+
+def _config_error_text(exc: ValidationError) -> str:
+    """Собрать понятное сообщение об ошибке конфигурации.
+
+    Текст pydantic в лог не попадает: в нём может оказаться значение переменной
+    (в том числе секрет), а нам нужна только подсказка, что делать.
+    """
+    errors = exc.errors()
+    parts: list[str] = []
+
+    if any(err.get("loc") == ("ENCRYPTION_KEY",) for err in errors):
+        parts.append(ENCRYPTION_KEY_MESSAGE)
+
+    missing = [
+        str(err["loc"][0]) for err in errors if err.get("type") == "missing" and err.get("loc") != ("ENCRYPTION_KEY",)
+    ]
+    if missing:
+        parts.append(f"Не заданы обязательные переменные окружения: {', '.join(missing)}.")
+
+    if not parts:
+        fields = ", ".join(str(err.get("loc", ("?",))[0]) for err in errors)
+        parts.append(f"Некорректная конфигурация: проверьте {fields}.")
+
+    parts.append("Заполните .env по образцу .env.example.")
+    return " ".join(parts)
+
+
+try:
+    settings = Settings()
+except ValidationError as exc:
+    raise ConfigError(_config_error_text(exc)) from None
