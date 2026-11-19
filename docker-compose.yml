@@ -62,7 +62,7 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASS}
       - POSTGRES_DB=${DB_NAME}
-      - PGDATA='/var/lib/postgresql/data/pgdata'
+      - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       # Публикуем на отдельный host-порт: 5432/5433 часто заняты локальным Postgres.
       # Внутри compose-сети порт остаётся 5432.
