@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import fakeredis.aioredis
 import pytest
+from loguru import logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -46,3 +47,31 @@ def ru_locale() -> Iterator[I18n]:
 
     with i18n.context():
         yield i18n
+
+
+@pytest.fixture
+def celery_eager() -> Iterator[None]:
+    """Выполняет задачи Celery в текущем процессе: без брокера и без сети.
+
+    `task_eager_propagates=True` — исключение задачи видно в тесте, а не только
+    в результате (`result.state`). Значения возвращаются после теста.
+    """
+    from bot.celery_app import celery_app  # noqa: PLC0415 — импорт после выставления env
+
+    conf = celery_app.conf
+    previous = (conf.task_always_eager, conf.task_eager_propagates)
+    conf.update(task_always_eager=True, task_eager_propagates=True)
+    yield
+    conf.update(task_always_eager=previous[0], task_eager_propagates=previous[1])
+
+
+@pytest.fixture
+def log_messages() -> Iterator[list[str]]:
+    """Собирает текст сообщений loguru (INFO и выше) внутри теста."""
+    messages: list[str] = []
+    handler_id = logger.add(
+        lambda message: messages.append(message.record["message"]),
+        level="INFO",
+    )
+    yield messages
+    logger.remove(handler_id)
