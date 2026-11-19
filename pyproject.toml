@@ -55,6 +55,10 @@ dev = [
     "types-cachetools>=7.0.0.20260713,<8.0.0.0",
     "alembic>=1.19.1",
     "watchfiles>=0.21,<2.0",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "respx>=0.23.1",
+    "fakeredis>=2.40.0",
 ]
 
 [tool.ruff]
@@ -70,7 +74,15 @@ no-lines-before = ["future", "standard-library"]
 known-local-folder = ["bot", "admin"]
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/*.py" = ["ANN401", "S101", "S311"]
+"tests/*.py" = ["ANN", "S101", "S105", "S106", "PLR2004", "PT011", "ARG001", "ARG002", "FBT001", "FBT002"]
+"tests/**/*.py" = ["ANN", "S101", "S105", "S106", "PLR2004", "PT011", "ARG001", "ARG002", "FBT001", "FBT002"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
 
 [tool.mypy]
 python_version = "3.13"
