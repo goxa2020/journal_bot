@@ -44,7 +44,7 @@ docker compose exec bot alembic current
 | Переменная | Пример | Комментарий |
 |---|---|---|
 | `BOT_TOKEN` | `123456:AA...` | от @BotFather |
-| `ENCRYPTION_KEY` | `kZ3...=` (44 символа) | **Fernet-ключ**; без него бот не стартует (после задачи 0.2) |
+| `ENCRYPTION_KEY` | `kZ3...=` (44 символа) | **Fernet-ключ**; без него или с невалидным ключом бот не стартует (фаза 0) |
 | `DB_*` | `postgres/postgres/postgres` | для compose имена хостов — имена сервисов |
 | `REDIS_*` | `redis/6379` | |
 
@@ -58,9 +58,9 @@ uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_
 > все пользователи должны войти заново. Ключ храните отдельно от бэкапа БД (менеджер секретов
 > или защищённая папка) и никогда — в git.
 >
-> **Пока не закрыта задача 0.2**, пустой `ENCRYPTION_KEY` не роняет бот: при старте
-> генерируется случайный ключ, и после перезапуска расшифровка паролей ломается. Заполните
-> ключ до первого входа реальных пользователей.
+> **Если ключ пуст или невалиден**, бот падает на старте с сообщением `ConfigError`:
+> что это за ключ и как его сгенерировать. Случайный ключ больше не подставляется — иначе
+> после рестарта сохранённые пароли переставали расшифровываться.
 
 ### Если VPN работает только на хосте
 
@@ -175,7 +175,7 @@ DEBUG=False
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy bot/
-uv run pytest -q                      # заработает после задачи 0.7
+uv run pytest -q
 ```
 
 ### pre-commit и кэши
@@ -239,27 +239,32 @@ just babel-compile    # .po → .mo
 
 ## 7. Тесты
 
-Каркас появится в задаче 0.7. Целевая структура и правила:
+Каркас появился в фазе 0 (задачи 0.7 и 0.10). Структура и правила:
 
 ```
 tests/
-├── conftest.py              # фикстуры: фиктивные ответы API, сессия, settings
-├── fixtures/edu_tpi/        # обезличенные JSON-ответы
-├── unit/                    # парсер, диф, форматирование, политика уведомлений, статистика
-└── integration/             # сценарии: вход → синхронизация → уведомление, задачи Celery eager
+├── conftest.py              # env для Settings, fakeredis, русская локаль, стабы
+├── unit/                    # TTL, шифрование, кеш users, вход, форматтеры
+└── integration/             # сценарии Celery eager — фаза 1
 ```
 
 ```bash
+just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
 uv run pytest -q                    # всё
 uv run pytest tests/unit -q         # быстро
-uv run pytest -k parser -vv         # один срез
+uv run pytest -k token_ttl -vv      # один срез
 ```
 
 Правила:
 
-- сеть в тестах запрещена: `respx` мокает edu-tpi, `fakeredis` — Redis, БД — через тестовую схему;
+- сеть в тестах запрещена: HTTP-слой edu-tpi подменяется стабом `aiohttp.ClientSession`
+  (в `tests/unit/test_auth_service.py`), Redis — `fakeredis`, БД — заглушкой сессии.
+  `respx` установлен для будущих httpx-клиентов: с `aiohttp` он не работает;
 - в фикстурах API **нет реальных ФИО и оценок** — только обезличенные фрагменты;
-- парсер и диф оценок тестируются на каждое изменение — это самое хрупкое место.
+- `tests/conftest.py` выставляет `BOT_TOKEN` и тестовый `ENCRYPTION_KEY` до импорта `bot.*`;
+  это тестовые значения, не секреты;
+- парсер и диф оценок тестируются на каждое изменение — это самое хрупкое место;
+- CI (job «Run tests») ставит зависимости, компилирует локали и запускает `pytest -q`.
 
 ## 8. Windows
 
@@ -281,7 +286,7 @@ uv run pytest -k parser -vv         # один срез
 | `prepared statement "__asyncpg_..." already exists` | pgbouncer в transaction-режиме | `POOL_MODE=session` в compose (уже выставлен), уникальные имена в `CConnection` |
 | `Connection refused` к Redis/Postgres | локальный запуск с docker-хостами | в `.env`: `DB_HOST=localhost`, `REDIS_HOST=localhost` |
 | Тексты в боте не меняются | не скомпилированы `.mo` | `just babel-compile`, перезапуск бота |
-| Кнопки меню не реагируют | обработчиков ещё нет | ROADMAP 2.7–2.9, 3.3 |
+| Кнопки меню отвечают «🚧 В разработке» | обработчиков ещё нет, стоит заглушка (`callback/stubs.py`) | это ожидаемо; экраны появятся в ROADMAP 2.7–2.9, 3.3 |
 | `401` в логах синхронизации | истёк токен | переавторизация по сохранённым данным; если не помогла — `/logout` и вход заново |
 | `ZoneInfoNotFoundError: 'Europe/Moscow'` | нет базы часовых поясов: Windows и alpine-образ без `tzdata` | до задачи 0.2: `uv add tzdata` (плюс `apk add tzdata` в Dockerfile) или запускать в Docker с установленным `tzdata` |
 | `TelegramNetworkError: ClientConnectorError ... api.telegram.org` | VPN работает только на хосте, Docker не видит системный прокси | задать `TELEGRAM_PROXY=http://host.docker.internal:10809` в `.env`, перезапустить бота (см. §2) |

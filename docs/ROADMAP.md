@@ -28,16 +28,17 @@
 | Инфраструктура | ✅ | compose (бот, админка, postgres, pgbouncer, redis, миграции, бэкапы, prometheus, grafana, node-exporter), Dockerfile ×2, CI, pre-commit, `just`/`make` | сервисы `worker`, `beat`, `flower` |
 | Схема БД | 🟡 | `users`, `journals`, `grades`, `sync_logs`, `student_journal`, 5 миграций | корректного PK `grades` (см. 2.1) |
 | Каркас бота | ✅ | polling/webhook, FSM в Redis, middlewares, i18n ru/en, меню, аналитика, Sentry, логи | обработчиков оценок/статистики/настроек |
-| Вход в edu-tpi | 🟡 | FSM логин→пароль с inline-отменой, `api_client`, шифрование пароля, токен в Redis, `users` обновляется, понятная ошибка при недоступности edu-tpi | кеша токена и повторной авторизации по сохранённым данным (2.4) |
+| Вход в edu-tpi | ✅ | FSM логин→пароль с inline-отменой, `api_client`, обязательный `ENCRYPTION_KEY`, токен в Redis, `users` обновляется, «сервис недоступен» отличается от неверных данных | кеша токена и повторной авторизации по сохранённым данным (2.4) |
 | Парсер журнала | 🟡 | `JournalParser`: список журналов, детали, выборка строки студента, уроки | группового кеша, подгрупп, сохранения в БД |
 | Синхронизация | ⬜ | — | `GradeSyncService`, диф, `sync_logs` |
 | Уведомления | ⬜ | — | `NotificationService`, ночная политика |
 | Экраны оценок/статистики | ⬜ | — | `/grades`, `/stats`, `/settings`, `/logout`, callback-обработчики |
 | Celery | ⬜ | только `CelerySettings` в конфиге | приложение, задачи, воркеры, beat |
 | Админка | 🟡 | вход, роли, пользователи, дашборд | журналы, оценки, логи синхронизаций |
-| Тесты | ⬜ | — | pytest, фикстуры API, юнит- и интеграционные тесты |
+| Тесты | ✅ | pytest + pytest-asyncio, `fakeredis`, HTTP-стаб edu-tpi, 42 unit-теста, job «Run tests» в CI | тестов парсера, дифа и интеграционных сценариев (фазы 2–3) |
 
-**Готовность MVP: ~45%** (инфраструктура и вход — работают, синхронизация и уведомления — нет).
+**Готовность MVP: ~50%** (инфраструктура и вход — работают, фундамент и тесты — закрыты,
+синхронизация и уведомления — нет).
 
 ### Что сделано ранее (для истории)
 
@@ -62,7 +63,11 @@
   вместо `chown -R` (сборка после правки кода ~7 с вместо ~90–105 с); `just dev` (локальный
   запуск с автоперезапуском и `.env.local`), `just watch` (`docker compose watch`); host-порты
   БД/Redis разведены с локальным Postgres (`6432`/`6433`/`6380`);
-- 🟡 рефакторинг авторизации в сервисный слой (в рабочей копии, не в коммите).
+- ✅ рефакторинг авторизации в сервисный слой (`fix(auth)`): `AuthService`-функции в
+  `bot/services/auth.py`, inline-отмена, различение «неверные данные» и «сервис недоступен»;
+- ✅ фаза 0 закрыта (19.11.2026): обязательный `ENCRYPTION_KEY` и `encryption.py`, кеш
+  `is_authorized`, удаление мёртвого кода, реальная последняя оценка в меню, заглушки кнопок,
+  каркас pytest и 42 unit-теста, job «Run tests» в CI.
 
 ---
 
@@ -74,18 +79,20 @@
 | № | Задача | Статус | Ч | Файлы |
 |---|---|---|---|---|
 | 0.1 | Ключ токена: `accessToken` вместо `access_token`, `expiresIn` из **минут** в секунды (TTL = `expiresIn*60 − 300`), резервный TTL при отсутствии поля | ✅ | 1 | [bot/services/auth.py](../bot/services/auth.py) |
-| 0.2 | Конфигурация на старте: `ENCRYPTION_KEY` обязателен (валидация Fernet, убрать `Fernet.generate_key()` по умолчанию). `tzdata` для `ZoneInfo` уже добавлен (Windows/alpine), `uvloop` ставится только на Linux | 🟡 | 2 | [bot/core/config.py](../bot/core/config.py), [pyproject.toml](../pyproject.toml) |
-| 0.3 | Ключи кеша от `user_id`, а не от объекта `session`; `is_authorized` кэшировать и сбрасывать согласованно | ⬜ | 2 | [bot/services/users.py](../bot/services/users.py), [bot/cache/redis.py](../bot/cache/redis.py) |
-| 0.4 | Удалить мёртвый код: `services/journals.py` и `services/sync_logs.py` (написаны под старую схему, не импортируются), `scripts/test_parser.py` с заглушками; вернуть нужное на фазе 2 | ⬜ | 1 | `bot/services/`, [scripts/test_parser.py](../scripts/test_parser.py) |
-| 0.5 | Реальная последняя оценка в главном меню вместо `"Математика", "30.02.2026"` | ⬜ | 1 | [bot/utils/main_menu.py](../bot/utils/main_menu.py) |
-| 0.6 | Авторизация без reply-клавиатуры: отмена inline-кнопкой (reply-клавиатуру нельзя прикрепить к `edit_message_text`); кнопки меню без обработчиков — заглушка «в разработке» | 🟡 | 2 | [bot/handlers/message/auth.py](../bot/handlers/message/auth.py), [bot/keyboards/inline/auth.py](../bot/keyboards/inline/auth.py) |
-| 0.7 | Каркас тестов: `pytest`, `pytest-asyncio`, `respx`, фикстуры JSON, конфиг в `pyproject.toml`, job в CI | ⬜ | 4 | `tests/`, [pyproject.toml](../pyproject.toml), `.github/workflows/` |
+| 0.2 | Конфигурация на старте: `ENCRYPTION_KEY` обязателен (валидация Fernet, `Fernet.generate_key()` убран), шифрование вынесено в [bot/core/encryption.py](../bot/core/encryption.py), понятная ошибка запуска без ключа. `tzdata` для `ZoneInfo` уже добавлен (Windows/alpine), `uvloop` ставится только на Linux | ✅ | 2 | [bot/core/config.py](../bot/core/config.py), [bot/core/encryption.py](../bot/core/encryption.py), [bot/core/errors.py](../bot/core/errors.py) |
+| 0.3 | Кеш `is_authorized` (проверка идёт на каждом апдейте) и согласованный сброс: `set_user_data`, `set_language_code`, `set_edu_credentials`, `set_is_admin`, `add_user`. `clear_cache` строит тот же ключ, что `@cached`; `get_all_users` больше не кеширует ORM-объекты | ✅ | 2 | [bot/services/users.py](../bot/services/users.py), [bot/cache/redis.py](../bot/cache/redis.py) |
+| 0.4 | Удалён мёртвый код: `services/journals.py`, `services/sync_logs.py` (старая схема «предметов»), `scripts/test_parser.py`, `keyboards/reply/`, `utils/command.py`, `filters/number.py`; убраны писатели в несуществующие колонки `last_sync`/`notifications_enabled`. Нужное вернётся на фазе 2 | ✅ | 1 | `bot/services/`, `bot/keyboards/`, `bot/utils/`, `bot/filters/`, `scripts/` |
+| 0.5 | Реальная последняя оценка в главном меню: `GradesService.get_last_grade` (join с `journals`), форматтер `ДД.ММ.ГГГГ` в [bot/utils/formatters.py](../bot/utils/formatters.py), «Оценки не найдены» при пустой таблице | ✅ | 1 | [bot/services/grades.py](../bot/services/grades.py), [bot/utils/formatters.py](../bot/utils/formatters.py), [bot/utils/main_menu.py](../bot/utils/main_menu.py) |
+| 0.6 | Авторизация без reply-клавиатуры (осталась только inline-отмена и `/cancel`); кнопки меню без обработчиков отвечают `callback.answer()` «🚧 В разработке» | ✅ | 2 | [bot/handlers/message/auth.py](../bot/handlers/message/auth.py), [bot/handlers/callback/stubs.py](../bot/handlers/callback/stubs.py), [bot/keyboards/inline/auth.py](../bot/keyboards/inline/auth.py) |
+| 0.7 | Каркас тестов: `pytest`, `pytest-asyncio`, `respx`, `fakeredis`, конфиг в `pyproject.toml`, `tests/conftest.py`, job «Run tests» в CI, `pythonpath` и per-file-ignores для `tests/` | ✅ | 4 | `tests/`, [pyproject.toml](../pyproject.toml), [.github/workflows/linters.yml](../.github/workflows/linters.yml) |
 | 0.8 | `uvloop` только на Linux: опциональный импорт, на Windows — обычный loop; локальный запуск работает | ✅ | 1 | [bot/__main__.py](../bot/__main__.py) |
 | 0.9 | `.env.example`: плейсхолдеры вместо похожих на настоящие секретов, комментарии, генерация ключа, backend Redis `/2` | ✅ | 1 | [.env.example](../.env.example) |
-| 0.10 | Тесты на `api_client` (моки ответов) и на `users` (шифрование/кеш) — вход в режим «есть тесты» | ⬜ | 3 | `tests/unit/` |
+| 0.10 | Первые настоящие тесты (42): TTL токена, inline-клавиатура отмены и регрессия `EditMessageText`, ошибки входа (неверные данные / сеть / 5xx), шифрование, кеш `is_authorized` с `fakeredis`, форматтер и пустое меню | ✅ | 3 | `tests/unit/` |
 
-**Итог фазы: ~18 ч, из них 3 ч уже закрыты (0.1, 0.8, 0.9).** Критерий: вход проходит на реальном edu-tpi,
-в логах нет `InvalidToken`, `ruff` и `mypy` зелёные, `pytest` есть в CI.
+**Итог фазы: ~18 ч, все задачи закрыты.** Фаза 0 проверена: `ruff`, `ruff format`, `mypy`,
+`pytest` (42 теста), сборка и запуск контейнера. Критерий входа на реальном edu-tpi
+проверяется вручную по [DEVELOPMENT.md](DEVELOPMENT.md) §9; в этой сессии тестового аккаунта
+не было.
 
 ---
 
@@ -238,11 +245,11 @@
 
 | Фаза | Содержание | Часы | Статус |
 |---|---|---|---|
-| 0 | Фундамент и исправления | 18 | ⬜ |
+| 0 | Фундамент и исправления | 18 | ✅ |
 | 1 | Celery | 19 | ⬜ |
 | 2 | Синхронизация и оценки | 38 | ⬜ |
 | 3 | Уведомления | 18 | ⬜ |
-| **MVP** | **0–3** | **~93** | **🟡 45% готовности** |
+| **MVP** | **0–3** | **~93** | **🟡 50% готовности** |
 | 4 | Автосинхронизация | 13 | ⬜ |
 | 5 | Режим ожидания | 11 | ⬜ |
 | 6 | Статистика | 15 | ⬜ |
@@ -276,6 +283,41 @@
 - [ ] проверено руками в Telegram (для пользовательских сценариев);
 - [ ] обновлены `ROADMAP.md` (статус) и, при необходимости, `ARCHITECTURE.md`/`API.md`;
 - [ ] в задаче нет `TODO` без ссылки на номер задачи.
+
+### Замечено вне фазы 0 (не исправлялось)
+
+- `build_key("auth:token", user_id)` даёт ключ с хвостовым двоеточием (`auth:token:1:`), а
+  [ARCHITECTURE.md](ARCHITECTURE.md) §4.2 обещает `auth:token:{user_id}`. Работает, но формат
+  стоит выровнять в фазе 2 вместе с кешем токена.
+- `respx` (0.23) не умеет мокать `aiohttp` — он работает только с `httpx`. HTTP-тесты входа
+  используют локальный стаб `aiohttp.ClientSession`; `respx` оставлен в dev-зависимостях на
+  случай перехода интеграций на httpx в фазе 2. Решение о клиенте — задача 2.2.
+- `api_client` и `journal_parser` дублируют URL и создают сессию на каждый запрос; слияние —
+  задача 2.2.
+- `bot/services/journal_parser.py` нигде не импортируется, но нужен фазе 2 — оставлен осознанно.
+- `grades.id` остаётся PK от `dateID` — синхронизация на такой схеме невозможна, миграция 2.1.
+- `bot/services/auth.py` по-прежнему смешивает HTTP, шифрование, Redis, БД и правку сообщений
+  Telegram — рефакторинг в 2.2/2.4.
+- `pgbackup` снимает дампы клиентом `pg_dump` 17 с сервера PostgreSQL 14: в дампе есть
+  `SET transaction_timeout`, которого нет в 14, поэтому восстановление «как есть» падает.
+  Варианты — обновить сервер до 17 или закрепить клиент 14; в этой сессии дамп восстановлен
+  с удалением этой строки.
+- `get_edu_credentials` возвращает `(None, None)`, если повреждена любая из двух частей; после
+  смены `ENCRYPTION_KEY` пользователь просто входит заново, отдельного уведомления нет.
+- Комментарии `#:` в `.po` ссылаются на удалённые файлы; `just babel` их перегенерирует.
+- `.mo` не в git: перед `pytest` (тесты проверяют русские тексты) и ручным запуском нужен
+  `just babel-compile`; CI компилирует локали отдельным шагом.
+- `uv add` / `uv lock` на машине разработчика ходят в PyPI только через прокси хоста
+  (`HTTPS_PROXY=http://127.0.0.1:10809`) — это окружение, а не проблема проекта.
+
+### Исправлено по ходу вне фазы 0
+
+- **[docker-compose.yml](../docker-compose.yml): `PGDATA` был в кавычках.** Compose передаёт
+  значение вместе с ними, поэтому кластер создавался в слое контейнера, а не в томе
+  `tgbot_postgres-data`; любое пересоздание `postgres` теряло БД. Кавычки убраны, том теперь
+  используется по назначению. Данные после пересоздания восстановлены из `pgbackup`
+  (последний дамп — 19.11.2026 02:13); изменения за 02:13–05:14, если они были, потеряны —
+  проверить при следующем входе.
 
 ### Чек-лист перед production (после MVP)
 

@@ -136,8 +136,8 @@ core/ (config, loader, cache)          инфраструктура
   Целевое: `AuthService` (данные) + `handler` (сообщения).
 - [bot/handlers/message/auth.py](../bot/handlers/message/auth.py) содержит правила валидации
   логина — это сервис.
-- `bot/services/journals.py`, `bot/services/sync_logs.py` написаны под старую схему «предметов»
-  и не импортируются ниоткуда — либо переписать, либо удалить.
+- `bot/services/journals.py` и `bot/services/sync_logs.py` удалены в фазе 0: они были написаны
+  под старую схему «предметов» и нигде не импортировались.
 
 ### Целевая структура каталогов
 
@@ -155,10 +155,10 @@ bot/
 ├── integrations/          edu-tpi клиент и парсер                      [частично: services/]
 ├── services/              auth, grade_sync, notification, statistics, export
 ├── handlers/              message/, callback/
-├── keyboards/             inline/, reply/
+├── keyboards/             inline/
 ├── middlewares/           auth, database, i18n, throttling, logging
 ├── locales/               ru/en
-└── utils/                 форматирование, меню, команды
+└── utils/                 форматирование, меню
 ```
 
 ---
@@ -560,7 +560,7 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | Аспект | Решение |
 |---|---|
 | Учётные данные edu-tpi | Fernet (AES-128-CBC + HMAC), ключ в `ENCRYPTION_KEY`, только в `.env` |
-| Ключ шифрования | Обязателен, валидируется на старте; без ключа бот не запускается. Сейчас при отсутствии генерируется случайный — это ломает расшифровку после рестарта |
+| Ключ шифрования | Обязателен, валидируется на старте (`Fernet`); без валидного ключа бот не запускается. Случайный ключ по умолчанию убран в фазе 0 — он ломал расшифровку после рестарта |
 | Пароль в чате | Сообщение пользователя удаляется сразу после чтения, пароль не логируется |
 | Токен | Redis с TTL, не попадает в БД и логи |
 | Rate limit бота | Redis-счётчик на пользователя, 30 апдейтов/мин (+ текущий TTLCache как быстрый слой) |
@@ -650,9 +650,10 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 
 Полный список — [ROADMAP.md](ROADMAP.md). Архитектурно значимое:
 
-1. **Фаза 0.** Ключ `accessToken` и перевод `expiresIn` из минут в секунды; валидация
-   конфигурации на старте (Fernet-ключ, часовой пояс); ключи кеша от `user_id`, а не от объекта
-   сессии; удаление/переписывание `journals.py` и `sync_logs.py`; `uvloop` только на Linux.
+1. **Фаза 0 — сделано.** Ключ `accessToken` и перевод `expiresIn` из минут в секунды;
+   обязательный `ENCRYPTION_KEY` и `encryption.py`; кеш `is_authorized`; удаление
+   `journals.py`/`sync_logs.py` и reply-клавиатуры; `uvloop` только на Linux; каркас тестов
+   и 40 unit-тестов. Осталось: рефакторинг `auth.py` по слоям (2.2/2.4).
 2. **Фаза 1.** `celery_app.py`, `tasks/`, сервисы в compose, мост sync/async, `/healthz`.
 3. **Фаза 2.** Слияние `api_client` и `journal_parser` в `integrations/edu_tpi.py`;
    `GradeSyncService`; миграция `grades`; экраны оценок.
