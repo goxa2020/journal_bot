@@ -27,8 +27,8 @@ def database_url() -> str:
     db_name: str = os.getenv("DB_NAME") or "postgres"
 
     if db_pass:
-        return f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-    return f"postgresql://{db_user}@{db_host}:{db_port}/{db_name}"
+        return f"postgresql+psycopg2://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    return f"postgresql+psycopg2://{db_user}@{db_host}:{db_port}/{db_name}"
 
 
 SQLALCHEMY_DATABASE_URI: str = database_url()
