@@ -156,6 +156,10 @@ DEBUG=False
 | `just logs bot` | логи сервиса |
 | `just compose-exec bot <cmd>` | выполнить команду в контейнере |
 | `just dev` | локальный запуск с автоперезапуском (`.env.local`, `watchfiles`) |
+| `just dev-worker` | локальный Celery-воркер без Docker (`.env.local`, `--pool=solo` на Windows) |
+| `just worker` / `just beat` | поднять Celery worker / beat в Docker |
+| `just worker-logs` | логи `worker` и `beat` |
+| `just celery-ping` | `celery inspect ping` из контейнера воркера (должен ответить `pong`) |
 | `just watch` | `docker compose watch`: правки `bot/` синхронизируются и перезапускают контейнер |
 | `docker compose --profile host-metrics up -d` | добавить `node-exporter` (только Linux-хост) |
 | `just mm "message"` | новая миграция (autogenerate) |
@@ -295,28 +299,71 @@ uv run pytest -k token_ttl -vv      # один срез
 | `invalid role "tgbot"` / пустая схема при локальном запуске | подключились к локальному Postgres, а не к контейнеру | `DB_HOST=127.0.0.1`, `DB_PORT=6432` (pgbouncer) или `6433` (postgres) в `.env.local` |
 | `relation "users" does not exist` | в томе пустая БД (новый том после пересоздания контейнера) | `docker compose run --rm migrator` |
 | `409 Conflict` в логах Telegram | два поллера с одним токеном (локальный и контейнерный) | остановить один: `docker compose stop bot` |
+| `Error 11001 connecting to redis:6379` у воркера | воркер запущен локально, но читает `.env` с docker-хостами | локально — `just dev-worker` (`ENV_FILE=.env.local`); вручную: `ENV_FILE=.env.local uv run celery -A bot.celery_app worker ...` |
+| `/healthz` не отвечает, `curl` висит | бот поднят в webhook-режиме или порт занят | в polling `/healthz` поднимает `bot/core/health.py` на `WEBHOOK_HOST:WEBHOOK_PORT`; проверить `docker compose port bot ${WEBHOOK_PORT}` и логи `health server` |
 | Порт занят | локальный сервис на 5433/6379/8080/3000 | изменить в `.env` или остановить локальный сервис |
 
 Логи: `logs/telegram_bot.log` в контейнере бота (в проде — `docker compose logs`), у воркера
 будет `logs/worker.log`. В контейнере логи смотрите через `just logs`, файлы — только при
 локальном запуске.
 
-## 10. Отладка фоновых задач (после фазы 1)
+## 10. Отладка фоновых задач
+
+Фаза 1 подняла Celery: приложение — [bot/celery_app.py](../bot/celery_app.py), задачи — `bot/tasks/`,
+воркер и beat — сервисы compose. Очереди: `sync`, `notify`, `maintenance`; один воркер слушает
+все три (`celery -A bot.celery_app worker -Q sync,notify,maintenance`).
 
 ```bash
-docker compose logs -f worker                 # выполнение задач
-docker compose exec worker celery -A bot.celery_app inspect active
-docker compose exec worker celery -A bot.celery_app inspect ping
+docker compose up -d worker beat              # поднять отдельно
+docker compose ps                             # worker healthy, beat Up
+docker compose logs -f worker                 # выполнение задач (stdout)
 docker compose logs -f beat                   # расписание
+docker compose exec worker celery -A bot.celery_app inspect ping
+docker compose exec worker celery -A bot.celery_app inspect active
+docker compose exec worker celery -A bot.celery_app inspect registered
+docker compose stop worker beat               # останавливает только их
 ```
 
-Flower (после фазы 8): `http://localhost:5555`, там же повтор задачи и просмотр аргументов.
-Запуск задачи руками из контейнера:
+Запуск задачи руками (нужен доступ к тому же Redis, что у воркера):
 
 ```bash
 docker compose exec worker python -c \
-  "from bot.tasks.sync import sync_user_manual; sync_user_manual.delay(123456789)"
+  "from bot.tasks.service import ping; print(ping.delay().get(timeout=10))"
 ```
+
+Smoke-задача `bot.tasks.service.ping` не пишет в БД и не ходит в Telegram: если она не отвечает
+`pong`, проблема в брокере или воркере, а не в задаче.
+
+Локальный воркер без Docker (нужен `.env.local`):
+
+```bash
+just dev-worker        # ENV_FILE=.env.local, --pool=solo (Windows), concurrency 1
+```
+
+`just dev-worker` дополнительно убирает из окружения переменные, которые `just` экспортировал
+из `.env`: `set dotenv-load` + `set export` в justfile перекрывают `.env.local` (pydantic-settings
+ставит переменные окружения выше env-файла), и воркер пошёл бы на `redis:6379` вместо
+опубликованного `127.0.0.1:6380`. С `just dev` (бот) та же ловушка — см. ROADMAP, «замечено
+вне фазы 1».
+
+Отладка без брокера — `CELERY_TASK_ALWAYS_EAGER=True`: задача выполняется в вызывающем процессе,
+`.delay()` не пишет в Redis. Так работают smoke-тесты (`tests/integration/test_celery_smoke.py`).
+В бою флаг должен быть `False` (иначе `.delay()` выполняет задачу прямо в боте).
+
+Куда смотреть, когда задача упала:
+
+| Симптом | Что это | Что делать |
+|---|---|---|
+| `retry #N` в логе, задача повторяется | `RetryableError`: сеть, 5xx, 429 | ретраи идут сами (backoff до 240 с, максимум 3 повтора). Не помогает — проверить доступность edu-tpi/Telegram, это не баг задачи |
+| `permanent error`, повторов нет | `PermanentError`: неверные данные или схема ответа | разбирать данные/парсер: повтор не поможет |
+| `skipped: locked key=...` | по этому объекту уже работает другая задача | норма: lock `SET NX EX` живёт 300 с, повтор пропускается без ошибки |
+| `inspect ping` не отвечает | воркер не подключился к брокеру | `docker compose logs worker`: адрес Redis; подключение повторяется автоматически |
+| задача «есть», но результата нет | смотреть `result_expires` (24 ч) | результат в Redis живёт сутки, тело задачи — в логе воркера |
+
+Логи: `docker compose logs` (stdout) и файл `/usr/src/app/logs/worker.log` в контейнере
+(ротация 100 КБ, как у бота; посмотреть — `docker compose exec worker tail -n 100 logs/worker.log`).
+Flower и celery-exporter появятся в фазе 8: до этого метрики задач (`celery_tasks_total`,
+`celery_task_failures_total`, `celery_task_duration_seconds`) живут только в процессе воркера.
 
 ## 11. Структура проекта
 

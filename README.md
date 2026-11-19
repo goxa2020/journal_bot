@@ -29,19 +29,24 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
 - ✅ хранение учётных данных в зашифрованном виде (Fernet) и токена в Redis;
 - ✅ разбор журнала: список дисциплин, детали, оценки и посещаемость (библиотека, без записи в БД);
 - ✅ каркас: локализация ru/en, меню, регистрация пользователей, аналитика, Sentry,
-  HTTP-метрики webhook-сервера;
+  HTTP-метрики;
+- ✅ фоновая обработка: Celery 5 + Redis, очереди `sync`/`notify`/`maintenance`, сервисы
+  `worker` и `beat` в compose, базовый класс задачи (повторы, lock на пользователя, логи,
+  метрики) и smoke-задача `ping`;
+- ✅ `/healthz` и `/metrics` у бота в обоих режимах (polling и webhook), healthcheck контейнера;
 - ✅ админ-панель Flask-Admin: вход по ролям, список пользователей;
-- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб edu-tpi, job «Run tests» в CI;
-- ✅ Docker Compose: бот, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы, Prometheus, Grafana;
+- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб edu-tpi, 63 теста, job «Run tests» в CI;
+- ✅ Docker Compose: бот, воркер, beat, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы,
+  Prometheus, Grafana;
 - ✅ реальная последняя оценка в главном меню; экраны оценок, статистики и настроек — в работе.
 
 ### Что в плане
 
-- ⬜ синхронизация оценок из журнала (Celery-воркер) и экран `/grades`;
+- ⬜ синхронизация оценок из журнала (задачи Celery) и экран `/grades`;
 - ⬜ уведомления о новых оценках, в том числе ночных — с доставкой утром;
 - ⬜ автоматическая синхронизация по расписанию, режим ожидания оценок;
 - ⬜ статистика: средний балл, посещаемость, динамика;
-- ⬜ экспорт в Excel, месячный дайджест, расширенная админка.
+- ⬜ экспорт в Excel, месячный дайджест, расширенная админка, Flower и метрики Celery.
 
 Полный план с оценками и критериями приёмки — [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -58,7 +63,7 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
 ## Технологии
 
 **Бот:** Python 3.13, aiogram 3.24, SQLAlchemy 2.0 (asyncpg), Alembic, Pydantic v2, Redis (FSM, кеш),
-Celery + Redis (план), gettext для локализации, loguru, Sentry, prometheus-client.
+Celery 5 + Redis (фоновые задачи), gettext для локализации, loguru, Sentry, prometheus-client.
 
 **Данные:** PostgreSQL 14 через PgBouncer, Redis 7.
 
@@ -89,11 +94,12 @@ docker compose up -d --build
 docker compose logs -f bot
 ```
 
-Миграции применяются автоматически сервисом `migrator`. Админка — `http://localhost:${ADMIN_PORT}`,
-Prometheus — `:9090`, Grafana — `:3000`.
+Миграции применяются автоматически сервисом `migrator`. Воркер и beat поднимаются вместе со
+стеком. Админка — `http://localhost:${ADMIN_PORT}`, Prometheus — `:9090`, Grafana — `:3000`,
+`/healthz` бота — `http://localhost:${WEBHOOK_PORT}/healthz`.
 
-Локальный запуск без Docker, быстрый цикл (`just dev`, `just watch`), миграции, тесты и отладка —
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Локальный запуск без Docker, быстрый цикл (`just dev`, `just dev-worker`, `just watch`), миграции,
+тесты и отладка фоновых задач — [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Структура репозитория
 

@@ -25,20 +25,20 @@
 
 | Блок | Статус | Что есть | Чего нет |
 |---|---|---|---|
-| Инфраструктура | ✅ | compose (бот, админка, postgres, pgbouncer, redis, миграции, бэкапы, prometheus, grafana, node-exporter), Dockerfile ×2, CI, pre-commit, `just`/`make` | сервисы `worker`, `beat`, `flower` |
+| Инфраструктура | ✅ | compose (бот, воркер, beat, админка, postgres, pgbouncer, redis, миграции, бэкапы, prometheus, grafana, node-exporter), Dockerfile ×2, CI, pre-commit, `just`/`make` | Flower и celery-exporter (фаза 8) |
 | Схема БД | 🟡 | `users`, `journals`, `grades`, `sync_logs`, `student_journal`, 5 миграций | корректного PK `grades` (см. 2.1) |
-| Каркас бота | ✅ | polling/webhook, FSM в Redis, middlewares, i18n ru/en, меню, аналитика, Sentry, логи | обработчиков оценок/статистики/настроек |
+| Каркас бота | ✅ | polling/webhook, FSM в Redis, middlewares, i18n ru/en, меню, аналитика, Sentry, логи, `/healthz` и `/metrics` в обоих режимах | обработчиков оценок/статистики/настроек |
 | Вход в edu-tpi | ✅ | FSM логин→пароль с inline-отменой, `api_client`, обязательный `ENCRYPTION_KEY`, токен в Redis, `users` обновляется, «сервис недоступен» отличается от неверных данных | кеша токена и повторной авторизации по сохранённым данным (2.4) |
 | Парсер журнала | 🟡 | `JournalParser`: список журналов, детали, выборка строки студента, уроки | группового кеша, подгрупп, сохранения в БД |
 | Синхронизация | ⬜ | — | `GradeSyncService`, диф, `sync_logs` |
 | Уведомления | ⬜ | — | `NotificationService`, ночная политика |
 | Экраны оценок/статистики | ⬜ | — | `/grades`, `/stats`, `/settings`, `/logout`, callback-обработчики |
-| Celery | ⬜ | только `CelerySettings` в конфиге | приложение, задачи, воркеры, beat |
+| Celery | ✅ | приложение `journal_bot`, очереди `sync`/`notify`/`maintenance`, `BaseTask` (ретраи, lock, логи, метрики), мост sync/async, smoke-задача `ping`, сервисы `worker`/`beat` в compose | задач синхронизации и уведомлений (фазы 2–3), расписания beat (фаза 4) |
 | Админка | 🟡 | вход, роли, пользователи, дашборд | журналы, оценки, логи синхронизаций |
-| Тесты | ✅ | pytest + pytest-asyncio, `fakeredis`, HTTP-стаб edu-tpi, 42 unit-теста, job «Run tests» в CI | тестов парсера, дифа и интеграционных сценариев (фазы 2–3) |
+| Тесты | ✅ | pytest + pytest-asyncio, `fakeredis`, HTTP-стаб edu-tpi, 63 теста (включая Celery в eager-режиме), job «Run tests» в CI | тестов парсера, дифа и интеграционных сценариев (фазы 2–3) |
 
-**Готовность MVP: ~50%** (инфраструктура и вход — работают, фундамент и тесты — закрыты,
-синхронизация и уведомления — нет).
+**Готовность MVP: ~60%** (инфраструктура, вход, фундамент и каркас фоновой обработки готовы,
+тесты закрывают то, что уже написано; синхронизация, оценки и уведомления — нет).
 
 ### Что сделано ранее (для истории)
 
@@ -102,16 +102,21 @@
 
 | № | Задача | Статус | Ч | Файлы |
 |---|---|---|---|---|
-| 1.1 | `celery_app.py`: приложение, брокер `/1`, backend `/2`, JSON, timezone, `acks_late`, timeouts | ⬜ | 3 | `bot/celery_app.py` |
-| 1.2 | `celery_config.py`: константы из `CelerySettings`, маршрутизация задач по очередям | ⬜ | 2 | `bot/celery_config.py` |
-| 1.3 | Мост sync/async: `run_async`, `task_session()` с NullPool, `bot/tasks/base.py` | ⬜ | 3 | `bot/tasks/base.py` |
-| 1.4 | Базовый класс задачи: логирование, `RetryableError`/`PermanentError`, lock, метрики | ⬜ | 3 | `bot/tasks/base.py` |
-| 1.5 | `worker`, `beat` в compose с профилями и healthcheck; команды в `justfile` | ⬜ | 3 | [docker-compose.yml](../docker-compose.yml), [justfile](../justfile) |
-| 1.6 | Экземпляр `Bot` в воркере (с тем же `TELEGRAM_PROXY`) и хелпер отправки; `/healthz` у бота в polling-режиме | ⬜ | 3 | `bot/tasks/base.py`, [bot/__main__.py](../bot/__main__.py) |
-| 1.7 | Smoke-тест задач в `task_always_eager`; `celery inspect ping` в чек-листе | ⬜ | 2 | `tests/integration/` |
+| 1.1 | `celery_app.py`: приложение, брокер `/1`, backend `/2`, JSON, timezone, `acks_late`, timeouts; `celery_config.py` с константами из `CelerySettings` | ✅ | 3 | [bot/celery_app.py](../bot/celery_app.py), [bot/celery_config.py](../bot/celery_config.py) |
+| 1.2 | Очереди `sync`/`notify`/`maintenance`: маршрутизация по именам задач (`bot.tasks.sync.*` → `sync` и т.д.), `maintenance` по умолчанию | ✅ | 2 | [bot/celery_config.py](../bot/celery_config.py) |
+| 1.3 | Мост sync/async: `run_async`, `task_session()` с `NullPool` и `dispose`, `task_redis()`, `send_telegram_message()` со своим `Bot` и `TELEGRAM_PROXY` | ✅ | 3 | [bot/tasks/base.py](../bot/tasks/base.py) |
+| 1.4 | Базовый класс задачи: `RetryableError`/`PermanentError`, autoretry с backoff, lock `SET NX EX`, логи в stdout и `logs/worker.log`, метрики `celery_tasks_total`/`celery_task_failures_total`/`celery_task_duration_seconds` | ✅ | 3 | [bot/tasks/base.py](../bot/tasks/base.py), [bot/core/errors.py](../bot/core/errors.py) |
+| 1.5 | `worker`, `beat` в compose (один воркер на три очереди, healthcheck `celery inspect ping`, `restart: always`); команды `worker`, `beat`, `worker-logs`, `celery-ping`, `dev-worker` в `justfile`/`Makefile` | ✅ | 3 | [docker-compose.yml](../docker-compose.yml), [justfile](../justfile), [Makefile](../Makefile) |
+| 1.6 | Экземпляр `Bot` в воркере (с тем же `TELEGRAM_PROXY`) и хелпер отправки; `/healthz` и `/metrics` у бота в polling-режиме, healthcheck бота в compose | ✅ | 3 | [bot/tasks/base.py](../bot/tasks/base.py), [bot/core/health.py](../bot/core/health.py), [bot/__main__.py](../bot/__main__.py) |
+| 1.7 | Smoke-задача `ping`, тесты в `task_always_eager` (без брокера и сети), `celery inspect ping` в чек-листе, отладка в DEVELOPMENT §10 | ✅ | 2 | [bot/tasks/service.py](../bot/tasks/service.py), [tests/integration/](../tests/integration/), [tests/unit/test_tasks_base.py](../tests/unit/test_tasks_base.py), [docs/DEVELOPMENT.md](DEVELOPMENT.md) |
 
-**Итог фазы: ~19 ч.** Критерий: `docker compose up` поднимает воркер и beat, тестовая задача
-видна во Flower/логах, упавшая задача ретраится, `ping` отвечает.
+**Итог фазы: ~19 ч, все задачи закрыты (19.11.2026).** Проверено: `ruff`, `ruff format`, `mypy`,
+`pytest` (63 теста), `docker compose up -d` (весь стек), `worker` healthy, `beat` пишет
+`beat: Starting...`, `celery inspect ping` → `pong`, `ping.delay().get()` → `pong`,
+`curl /healthz` → `{"status": "ok", "service": "bot"}`, `/metrics` отдаёт метрики.
+Отправка из воркера в Telegram проверена вызовом `send_telegram_message` из контейнера
+`worker` (сообщение пришло в admin-чат из БД). Задач синхронизации и уведомлений нет —
+это фазы 2–3; расписание beat пустое до фазы 4.
 
 ---
 
@@ -246,10 +251,10 @@
 | Фаза | Содержание | Часы | Статус |
 |---|---|---|---|
 | 0 | Фундамент и исправления | 18 | ✅ |
-| 1 | Celery | 19 | ⬜ |
+| 1 | Celery | 19 | ✅ |
 | 2 | Синхронизация и оценки | 38 | ⬜ |
 | 3 | Уведомления | 18 | ⬜ |
-| **MVP** | **0–3** | **~93** | **🟡 50% готовности** |
+| **MVP** | **0–3** | **~93** | **🟡 60% готовности** |
 | 4 | Автосинхронизация | 13 | ⬜ |
 | 5 | Режим ожидания | 11 | ⬜ |
 | 6 | Статистика | 15 | ⬜ |
@@ -309,6 +314,37 @@
   `just babel-compile`; CI компилирует локали отдельным шагом.
 - `uv add` / `uv lock` на машине разработчика ходят в PyPI только через прокси хоста
   (`HTTPS_PROXY=http://127.0.0.1:10809`) — это окружение, а не проблема проекта.
+
+### Замечено вне фазы 1 (не исправлялось)
+
+- **`just dev` (локальный бот) не читает `.env.local`.** В justfile включены `set dotenv-load`
+  и `set export`, поэтому переменные `.env` попадают в окружение процесса и в
+  pydantic-settings перекрывают значения из `.env.local` (`ENV_FILE` задаёт только файл, а не
+  приоритет): локальный бот пойдёт на `pgbouncer`/`redis` вместо `127.0.0.1:6432`/`6380`.
+  `just dev-worker` обходит это, убирая экспортированные переменные перед запуском; общий фикс
+  (решение за владельцем) — `set dotenv-load := false` или явный список переменных в рецепте.
+- **Метрики задач Celery не экспортируются по HTTP.** `celery_tasks_total`,
+  `celery_task_failures_total`, `celery_task_duration_seconds` живут в процессе воркера;
+  `/metrics` бота их не видит. Нужен celery-exporter/Flower — фаза 8.
+- **`.env` не содержал `CELERY_*`** (были только дефолты `CelerySettings`): в Docker это работало
+  на значениях по умолчанию, локально — нет. Добавлены `CELERY_BROKER_URL`,
+  `CELERY_RESULT_BACKEND`, `CELERY_RESULT_EXPIRES`, `CELERY_TASK_ALWAYS_EAGER` в `.env` и
+  `.env.local` (файлы не в git).
+- **Celery не поставляет типы (`py.typed`)** — в трёх местах стоят `# type: ignore`
+  (`BaseTask(Task)`, декоратор задачи, декоратор сигнала). Если выйдет типизированный релиз,
+  игноры нужно снять.
+- **`worker` healthcheck зависит от `celery inspect ping`**: проверка запускает полноценный
+  `celery` CLI (~8 с на этой машине), поэтому `timeout: 30s`, `start_period: 120s`; при
+  перегрузке брокера контейнер может формально «unhealthy», хотя задачи идут. Для MVP приемлемо,
+  при проблемах — увеличить `timeout`/`retries`.
+- **Медленный импорт на Windows + Docker Desktop.** В контейнере `import aiogram` занимает ~60 с,
+  `celery -A ...` (healthcheck) — ~8 с, поэтому: aiogram импортируется локально внутри
+  `send_telegram_message` (остальные задачи за него не платят), а у healthcheck воркера
+  `timeout: 30s`, `start_period: 120s`. На Linux-хосте в разы быстрее; при переносе на VPS таймауты
+  можно уменьшить.
+- **Ротация `logs/worker.log` не мультипроцессная**: loguru не гарантирует корректную ротацию,
+  когда в файл пишут несколько процессов-детей prefork-пула (2 по умолчанию). При нескольких
+  воркерах — отдельный файл на pid или `enqueue=True` с одним писателем (фаза 8).
 
 ### Исправлено по ходу вне фазы 0
 
