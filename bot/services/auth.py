@@ -5,7 +5,6 @@ from typing import Any
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message
 from aiohttp import ClientError
-from aiohttp.client_exceptions import ClientResponseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.cache.redis import build_key, set_redis_value
@@ -41,14 +40,16 @@ async def authenticate_user(username: str, password: str) -> dict[str, Any] | No
     """Авторизация пользователя с его edu credentials.
 
     Возвращает `data` из ответа API: accessToken, expiresIn (минуты), id.
-    `None` — неверные учётные данные; сетевые ошибки пробрасываются выше.
+    `None` — неверные учётные данные; сбой сети или сервиса — `EduUnavailableError`.
     """
-    fingerprint = await get_fingerprint()
-
     try:
+        fingerprint = await get_fingerprint()
         auth_data = await auth_post(username, password, fingerprint)
-    except (InvalidCredsError, ClientResponseError):
+    except InvalidCredsError:
         return None
+    except (ClientError, TimeoutError, ParseError) as exc:
+        msg = "edu-tpi недоступен"
+        raise EduUnavailableError(msg) from exc
     return dict(auth_data)
 
 

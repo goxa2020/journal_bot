@@ -1,4 +1,5 @@
 import json
+from http import HTTPStatus
 from typing import Any
 
 import aiohttp
@@ -38,9 +39,15 @@ async def auth_post(username: str, password: str, fingerprint: str) -> dict[str,
     }
 
     async with aiohttp.ClientSession(timeout=timeout) as session, session.post(AUTH_URL, json=token_data) as resp:
-        if not resp.ok:
+        # 400/401/403 — неверная пара логин/пароль; 5xx и 429 — сбой сервиса,
+        # его нужно показать как «недоступен», а не как «неверные данные».
+        if resp.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN}:
             msg = f"Auth failed: status {resp.status}"
             raise InvalidCredsError(msg)
+        if resp.status >= HTTPStatus.INTERNAL_SERVER_ERROR or resp.status == HTTPStatus.TOO_MANY_REQUESTS:
+            msg = f"edu-tpi unavailable: status {resp.status}"
+            raise EduUnavailableError(msg)
+        resp.raise_for_status()
         try:
             token_json = await resp.json()
         except json.JSONDecodeError as e:
