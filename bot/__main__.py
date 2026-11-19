@@ -1,5 +1,7 @@
 from __future__ import annotations
 import asyncio
+import sys
+from typing import TYPE_CHECKING
 
 import sentry_sdk
 from aiogram.exceptions import TelegramNetworkError
@@ -17,10 +19,9 @@ from bot.middlewares import register_middlewares
 from bot.middlewares.prometheus import prometheus_middleware_factory
 from bot.services.admins import send_to_admins
 
-try:  # uvloop невозможен на Windows — там используется обычный event loop
-    import uvloop
-except ImportError:  # pragma: no cover
-    uvloop = None
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+    from typing import Any
 
 # from aiogram.utils.i18n import gettext as _
 
@@ -156,8 +157,16 @@ async def main() -> None:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
 
+def _run(entrypoint: Coroutine[Any, Any, None]) -> None:
+    """Запускает приложение: uvloop на Linux/macOS, обычный loop на Windows."""
+    if sys.platform == "win32":  # uvloop не поддерживается
+        asyncio.run(entrypoint)
+        return
+
+    import uvloop  # noqa: PLC0415 — нужен только вне Windows
+
+    uvloop.run(entrypoint)
+
+
 if __name__ == "__main__":
-    if uvloop is not None:
-        uvloop.run(main())
-    else:
-        asyncio.run(main())
+    _run(main())
