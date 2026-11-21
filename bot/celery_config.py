@@ -23,7 +23,11 @@ DEFAULT_QUEUE = QUEUE_MAINTENANCE
 
 # Маршрутизация по *именам* задач, а не по объектам: имя известно и тогда, когда задача
 # ещё не объявлена в этом процессе. `*` — всё остальное (служебные задачи, cleanup).
+# Точное правило для `sync_all_users` обязано стоять ДО wildcard `bot.tasks.sync.*`:
+# порядок ключей в этом словаре — порядок проверки маршрутов Celery. Батч идёт в
+# `maintenance`, чтобы не занимать очередь `sync`, где ждут пользователи.
 TASK_ROUTES: dict[str, dict[str, str]] = {
+    "bot.tasks.sync.sync_all_users": {"queue": QUEUE_MAINTENANCE},
     "bot.tasks.sync.*": {"queue": QUEUE_SYNC},
     "bot.tasks.notify.*": {"queue": QUEUE_NOTIFY},
     "bot.tasks.maintenance.*": {"queue": QUEUE_MAINTENANCE},

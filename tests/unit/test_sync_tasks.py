@@ -10,6 +10,7 @@ import pytest
 from celery.exceptions import Retry
 from prometheus_client import REGISTRY
 
+from bot.core.config import settings
 from bot.core.errors import EduAuthError, EduUnavailableError, ParseError, PermanentError
 from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.services.grade_sync import JournalSyncResult, NewGradeNotice, SyncSummary
@@ -32,6 +33,8 @@ class FakeSyncService:
         self.summary = summary
         self.error = error
         self.calls = 0
+        #: Аргументы, с которыми сервис создали в задаче (проверка флага 4.2).
+        self.init_kwargs: list[dict[str, Any]] = []
 
     async def sync_user(self, _user_id: int) -> SyncSummary:
         self.calls += 1
@@ -54,9 +57,10 @@ class FakeClientContext:
 
 def _install_environment(monkeypatch: pytest.MonkeyPatch, service: FakeSyncService, *, locked: bool = False):
     send = AsyncMock()
+    service.init_kwargs = []
 
     @asynccontextmanager
-    async def lock_context(_key: str, _ttl: int = 300):
+    async def lock_context(_key: str, _ttl: int = 300, **_kwargs: Any):
         yield not locked
 
     @asynccontextmanager
@@ -67,13 +71,17 @@ def _install_environment(monkeypatch: pytest.MonkeyPatch, service: FakeSyncServi
     async def session_context():
         yield MagicMock()
 
+    def service_factory(**kwargs: Any) -> FakeSyncService:
+        service.init_kwargs.append(kwargs)
+        return service
+
     monkeypatch.setattr("bot.tasks.sync.task_lock", lock_context)
     monkeypatch.setattr("bot.tasks.sync.task_redis", redis_context)
     monkeypatch.setattr("bot.tasks.sync.task_session", session_context)
     monkeypatch.setattr("bot.tasks.sync.EduTpiClient", FakeClientContext)
     monkeypatch.setattr("bot.tasks.sync.JournalCache", MagicMock())
     monkeypatch.setattr("bot.tasks.sync.TokenService", MagicMock())
-    monkeypatch.setattr("bot.tasks.sync.GradeSyncService", lambda **_kwargs: service)
+    monkeypatch.setattr("bot.tasks.sync.GradeSyncService", service_factory)
     monkeypatch.setattr("bot.tasks.sync.send_telegram_message", send)
     monkeypatch.setattr("bot.tasks.sync.load_user_sync_info", AsyncMock(return_value=USER))
     return send
@@ -272,3 +280,36 @@ def test_after_login_unavailable_is_retried(monkeypatch: pytest.MonkeyPatch, cel
 
     with pytest.raises(Retry):
         sync_user_after_login.apply(args=(1,)).get()
+
+
+@pytest.mark.parametrize("flag", [True, False])
+def test_manual_sync_passes_opportunistic_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+    flag: bool,
+) -> None:
+    """Оппортунистическая часть включается только флагом и только для ручной задачи."""
+    service = FakeSyncService(summary=_summary())
+    _install_environment(monkeypatch, service)
+    monkeypatch.setattr(settings, "SYNC_OPPORTUNISTIC", flag)
+
+    sync_user_manual.apply(args=(1,)).get()
+
+    kwargs = service.init_kwargs[-1]
+    assert kwargs["opportunistic"] is flag
+    assert callable(kwargs["notifier"])
+    assert callable(kwargs["user_lock"])
+
+
+def test_after_login_never_enables_opportunistic(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+) -> None:
+    """Первичный импорт после входа флаг не применяет — иначе залп «новых» оценок."""
+    service = FakeSyncService(summary=_summary())
+    _install_environment(monkeypatch, service)
+    monkeypatch.setattr(settings, "SYNC_OPPORTUNISTIC", True)
+
+    sync_user_after_login.apply(args=(1,)).get()
+
+    assert service.init_kwargs[-1]["opportunistic"] is False

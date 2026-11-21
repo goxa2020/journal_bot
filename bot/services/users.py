@@ -1,9 +1,9 @@
 from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 
 from bot.cache.redis import build_key, cached, clear_cache
 from bot.core.encryption import decrypt, encrypt
@@ -27,6 +27,45 @@ class UserSyncInfo:
     group_name: str | None
     full_name: str | None
     language_code: str | None
+
+
+#: Колонки `users`, которые нужны синхронизации (см. `UserSyncInfo`).
+SYNC_INFO_COLUMNS = (
+    User.id,
+    User.is_authenticated,
+    User.edu_user_id,
+    User.group_id,
+    User.group_name,
+    User.full_name,
+    User.language_code,
+)
+
+
+def _sync_info(row: Any) -> UserSyncInfo:
+    """Собрать :class:`UserSyncInfo` из строки выборки `SYNC_INFO_COLUMNS`."""
+    return UserSyncInfo(
+        id=row[0],
+        is_authenticated=bool(row[1]),
+        edu_user_id=row[2],
+        group_id=row[3],
+        group_name=row[4],
+        full_name=row[5],
+        language_code=row[6],
+    )
+
+
+def _sync_candidates_query() -> Select[Any]:
+    """Пользователи, которых вообще можно синхронизировать (без группы — нельзя)."""
+    query = (
+        select(*SYNC_INFO_COLUMNS)
+        .where(
+            User.is_authenticated.is_(True),
+            User.group_id.is_not(None),
+            User.edu_user_id.is_not(None),
+        )
+        .order_by(User.group_id, User.id)
+    )
+    return cast("Select[Any]", query)
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +207,16 @@ async def get_admins_ids(session: AsyncSession) -> list[int]:
     return list(admin_ids)
 
 
+async def load_admin_ids(session: AsyncSession) -> list[int]:
+    """Telegram id админов — версия без кеша для Celery-задач (задача 4.4).
+
+    `get_admins_ids` кешируется через глобальный Redis процесса бота и из воркера
+    недоступна, поэтому алерт админам читает id напрямую из БД.
+    """
+    query = select(User.id).filter_by(is_admin=True).order_by(User.id)
+    return list((await session.execute(query)).scalars())
+
+
 @cached(key_builder=lambda session: build_key())
 async def get_user_count(session: AsyncSession) -> int:
     query = select(func.count()).select_from(User)
@@ -278,27 +327,29 @@ async def is_authorized(session: AsyncSession, user_id: int) -> bool:
 
 async def load_user_sync_info(session: AsyncSession, user_id: int) -> UserSyncInfo | None:
     """Данные пользователя для синхронизации — одним запросом и без кеша."""
-    query = select(
-        User.id,
-        User.is_authenticated,
-        User.edu_user_id,
-        User.group_id,
-        User.group_name,
-        User.full_name,
-        User.language_code,
-    ).filter_by(id=user_id)
+    query = select(*SYNC_INFO_COLUMNS).filter_by(id=user_id)
     row = (await session.execute(query)).first()
     if row is None:
         return None
-    return UserSyncInfo(
-        id=row[0],
-        is_authenticated=bool(row[1]),
-        edu_user_id=row[2],
-        group_id=row[3],
-        group_name=row[4],
-        full_name=row[5],
-        language_code=row[6],
-    )
+    return _sync_info(row)
+
+
+async def load_sync_candidates(session: AsyncSession) -> list[UserSyncInfo]:
+    """Всех, кого можно синхронизировать фоновой задачей, — без кеша.
+
+    Версия без `@cached`, как `load_edu_credentials`: её вызывает Celery-воркер, а
+    глобальный Redis-клиент бота (`bot.core.loader`) задачам недоступен. Пользователи
+    без группы или `edu_user_id` в выборку не попадают — их нечем синхронизировать.
+    """
+    rows = (await session.execute(_sync_candidates_query())).all()
+    return [_sync_info(row) for row in rows]
+
+
+async def load_group_members(session: AsyncSession, group_id: int) -> list[UserSyncInfo]:
+    """Участники группы, которых можно синхронизировать (задача 4.2), — без кеша."""
+    query = _sync_candidates_query().where(User.group_id == group_id).order_by(User.edu_user_id, User.id)
+    rows = (await session.execute(query)).all()
+    return [_sync_info(row) for row in rows]
 
 
 async def load_notification_settings(session: AsyncSession, user_id: int) -> NotificationSettings | None:

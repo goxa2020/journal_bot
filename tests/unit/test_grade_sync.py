@@ -7,6 +7,7 @@
 from __future__ import annotations
 import datetime as dt
 import json
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -82,10 +83,16 @@ class FakeCache:
         return self.payloads[journal_id]
 
 
-def _store_grade(journal_id: int, lesson: Lesson, age: dt.timedelta | None = None) -> Grade:
+def _store_grade(
+    journal_id: int,
+    lesson: Lesson,
+    age: dt.timedelta | None = None,
+    *,
+    user_id: int = 1,
+) -> Grade:
     return Grade(
         id=1,
-        user_id=1,
+        user_id=user_id,
         journal_id=journal_id,
         date=lesson.date,
         hour_number=lesson.hour_number,
@@ -104,18 +111,22 @@ def sync_env(monkeypatch: pytest.MonkeyPatch):
     """Собрать сервис с подменёнными БД, кешем и токеном."""
     session = MagicMock()
     session.commit = AsyncMock()
-    store: dict[tuple[int, int], Grade] = {}
+    store: dict[tuple[int, int, int], Grade] = {}
 
-    async def load_map(_session: Any, _user_id: int, journal_id: int) -> dict[tuple[dt.date, int], Grade]:
+    async def load_map(_session: Any, user_id: int, journal_id: int) -> dict[tuple[dt.date, int], Grade]:
         return {
             (grade.date, grade.hour_number): grade
-            for (stored_journal, _hour), grade in store.items()
-            if stored_journal == journal_id
+            for (stored_user, stored_journal, _hour), grade in store.items()
+            if stored_user == user_id and stored_journal == journal_id
         }
 
-    async def insert_lessons(_session: Any, _user_id: int, journal_id: int, lessons: list[Lesson]) -> int:
+    async def insert_lessons(_session: Any, user_id: int, journal_id: int, lessons: list[Lesson]) -> int:
         for lesson in lessons:
-            store[(journal_id, lesson.hour_number)] = _store_grade(journal_id, lesson)
+            store[(user_id, journal_id, lesson.hour_number)] = _store_grade(
+                journal_id,
+                lesson,
+                user_id=user_id,
+            )
         return len(lessons)
 
     log = AsyncMock()
@@ -124,6 +135,7 @@ def sync_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(GradesService, "load_lesson_map", AsyncMock(side_effect=load_map))
     monkeypatch.setattr(GradesService, "insert_lessons", AsyncMock(side_effect=insert_lessons))
     monkeypatch.setattr("bot.services.grade_sync.load_user_sync_info", user)
+    monkeypatch.setattr("bot.services.grade_sync.load_group_members", AsyncMock(return_value=[]))
     monkeypatch.setattr("bot.services.grade_sync.upsert_and_link", link)
     monkeypatch.setattr("bot.services.grade_sync.write_sync_log", log)
 
@@ -136,10 +148,14 @@ def sync_env(monkeypatch: pytest.MonkeyPatch):
     }
 
 
-def _service(
+def _service(  # noqa: PLR0913 — тестовый конструктор сервиса
     cache: FakeCache,
     briefs: list[JournalBrief],
     client: FakeClient | None = None,
+    *,
+    opportunistic: bool = False,
+    notifier: Any = None,
+    user_lock: Any = None,
 ) -> GradeSyncService:
     session = MagicMock()
     session.commit = AsyncMock()
@@ -150,6 +166,9 @@ def _service(
         cache=cache,  # type: ignore[arg-type]
         tokens=FakeTokens(),  # type: ignore[arg-type]
         sync_type=SyncType.MANUAL,
+        opportunistic=opportunistic,
+        notifier=notifier,
+        user_lock=user_lock,
     )
 
 
@@ -186,15 +205,15 @@ async def test_repeated_sync_is_idempotent(sync_env) -> None:
 async def test_changed_value_updates_grade_and_timestamp(sync_env) -> None:
     old = _lesson(1, "4", number=4)
     journal = JournalBrief(id=10, name="Журнал 10")
-    sync_env["store"][(10, 1)] = _store_grade(10, old, age=dt.timedelta(days=3))
-    before = sync_env["store"][(10, 1)].updated_at
+    sync_env["store"][(1, 10, 1)] = _store_grade(10, old, age=dt.timedelta(days=3))
+    before = sync_env["store"][(1, 10, 1)].updated_at
 
     service = _service(FakeCache({10: _payload(10, (_lesson(1, "5", number=5),))}), [journal])
     summary = await service.sync_user(1)
 
     assert summary.updated_grades == 1
     assert summary.new_grades == 0
-    grade = sync_env["store"][(10, 1)]
+    grade = sync_env["store"][(1, 10, 1)]
     assert grade.value == "5"
     assert grade.updated_at > before
 
@@ -202,14 +221,14 @@ async def test_changed_value_updates_grade_and_timestamp(sync_env) -> None:
 async def test_trailing_spaces_do_not_count_as_change(sync_env) -> None:
     original = _lesson(1, "4", number=4)
     journal = JournalBrief(id=10, name="Журнал 10")
-    sync_env["store"][(10, 1)] = _store_grade(10, original)
+    sync_env["store"][(1, 10, 1)] = _store_grade(10, original)
     service = _service(FakeCache({10: _payload(10, (_lesson(1, "4  ", number=4),))}), [journal])
 
     summary = await service.sync_user(1)
 
     assert summary.new_grades == 0
     assert summary.updated_grades == 0
-    assert sync_env["store"][(10, 1)].value == "4"
+    assert sync_env["store"][(1, 10, 1)].value == "4"
 
 
 async def test_empty_journal_is_skipped_without_error(sync_env) -> None:
@@ -322,7 +341,7 @@ async def test_new_notices_describe_exactly_the_new_lessons(sync_env) -> None:
 
 async def test_changed_grade_is_not_a_new_notice(sync_env) -> None:
     journal = JournalBrief(id=10, name="Журнал 10")
-    sync_env["store"][(10, 1)] = _store_grade(10, _lesson(1, "4", number=4))
+    sync_env["store"][(1, 10, 1)] = _store_grade(10, _lesson(1, "4", number=4))
     service = _service(FakeCache({10: _payload(10, (_lesson(1, "5", number=5),))}), [journal])
 
     summary = await service.sync_user(1)
@@ -386,3 +405,141 @@ def test_new_grade_notice_dict_roundtrip() -> None:
 
     assert restored == notice
     assert restored.lesson_key == "10:2024-09-30:2"
+
+
+PEER = UserSyncInfo(
+    id=2,
+    is_authenticated=True,
+    edu_user_id=1002,
+    group_id=3273,
+    group_name="584 ис-3",
+    full_name="Петров П.П.",
+    language_code="ru",
+)
+
+
+def _group_payload(journal_id: int, students: dict[int, tuple[Lesson, ...]]) -> JournalPayload:
+    return JournalPayload(
+        journal_id=journal_id,
+        name=f"Журнал {journal_id}",
+        is_subgroup=False,
+        students=tuple(
+            StudentGrades(student_id=student_id, lessons=lessons) for student_id, lessons in students.items()
+        ),
+    )
+
+
+class NoticeRecorder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, list[NewGradeNotice]]] = []
+
+    def __call__(self, user_id: int, notices: Any) -> None:
+        self.calls.append((user_id, list(notices)))
+
+
+async def test_opportunistic_off_does_not_touch_peers(
+    sync_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Флаг выключен: чужие оценки не меняются и уведомлений нет (задача 4.2)."""
+    monkeypatch.setattr(
+        "bot.services.grade_sync.load_group_members",
+        AsyncMock(return_value=[USER, PEER]),
+    )
+    recorder = NoticeRecorder()
+    payload = _group_payload(10, {1001: (_lesson(1, "4", number=4),), 1002: (_lesson(2, "4", number=4),)})
+    service = _service(FakeCache({10: payload}), [JournalBrief(id=10, name="Журнал 10")], notifier=recorder)
+
+    summary = await service.sync_user(1)
+
+    assert {user_id for user_id, *_ in sync_env["store"]} == {1}
+    assert recorder.calls == []
+    assert summary.new_grades == 1
+
+
+async def test_opportunistic_updates_peer_and_notifies_once(
+    sync_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Флаг включён: участник группы обновляется тем же журналом и получает уведомление."""
+    monkeypatch.setattr(
+        "bot.services.grade_sync.load_group_members",
+        AsyncMock(return_value=[USER, PEER]),
+    )
+    # У участника уже была оценка в этом журнале — значит, это не первичный импорт.
+    sync_env["store"][(2, 10, 4)] = _store_grade(10, _lesson(4, "3", number=3), user_id=2)
+    recorder = NoticeRecorder()
+    payload = _group_payload(10, {1001: (_lesson(1, "4", number=4),), 1002: (_lesson(5, "5", number=5),)})
+    service = _service(
+        FakeCache({10: payload}),
+        [JournalBrief(id=10, name="Журнал 10")],
+        opportunistic=True,
+        notifier=recorder,
+    )
+
+    await service.sync_user(1)
+
+    assert (2, 10, 5) in sync_env["store"]
+    assert len(recorder.calls) == 1
+    user_id, notices = recorder.calls[0]
+    assert user_id == 2
+    assert [notice.lesson_key for notice in notices] == ["10:2024-09-30:5"]
+
+    # Повторный прогон не создаёт дублей и не уведомляет второй раз.
+    await service.sync_user(1)
+    assert len(recorder.calls) == 1
+    assert len(sync_env["store"]) == 3
+
+
+async def test_opportunistic_is_silent_on_peer_first_import(
+    sync_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Первичный импорт участника сохраняется, но не уведомляет о «новых» оценках."""
+    monkeypatch.setattr(
+        "bot.services.grade_sync.load_group_members",
+        AsyncMock(return_value=[USER, PEER]),
+    )
+    recorder = NoticeRecorder()
+    payload = _group_payload(10, {1001: (_lesson(1, "4", number=4),), 1002: (_lesson(5, "5", number=5),)})
+    service = _service(
+        FakeCache({10: payload}),
+        [JournalBrief(id=10, name="Журнал 10")],
+        opportunistic=True,
+        notifier=recorder,
+    )
+
+    await service.sync_user(1)
+
+    assert (2, 10, 5) in sync_env["store"]
+    assert recorder.calls == []
+
+
+async def test_opportunistic_skips_locked_peer(
+    sync_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Занятый sync:lock участника не трогаем: у него идёт своя синхронизация."""
+    monkeypatch.setattr(
+        "bot.services.grade_sync.load_group_members",
+        AsyncMock(return_value=[USER, PEER]),
+    )
+
+    @asynccontextmanager
+    async def lock(user_id: int):
+        yield user_id != PEER.id
+
+    recorder = NoticeRecorder()
+    payload = _group_payload(10, {1001: (_lesson(1, "4", number=4),), 1002: (_lesson(5, "5", number=5),)})
+    service = _service(
+        FakeCache({10: payload}),
+        [JournalBrief(id=10, name="Журнал 10")],
+        opportunistic=True,
+        notifier=recorder,
+        user_lock=lock,
+    )
+
+    await service.sync_user(1)
+
+    assert (2, 10, 5) not in sync_env["store"]
+    assert recorder.calls == []

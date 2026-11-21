@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_process_init
 
 from bot.celery_config import APP_NAME, CELERY_CONFIG, TASK_ROUTES
@@ -24,10 +25,18 @@ celery_app.config_from_object(CELERY_CONFIG, namespace=None)
 # Маршрутизация: см. bot/celery_config.py (по именам задач, а не по объектам).
 celery_app.conf.task_routes = TASK_ROUTES
 
-# Расписание пустое осознанно: автоматическая синхронизация — фаза 4, cleanup и
-# сбор метрик — фаза 8 (ARCHITECTURE §6.4). Beat в этой фазе только проверяется
-# как сервис; задачи синхронизации запускаются вручную и после входа.
-celery_app.conf.beat_schedule = {}
+# Расписание beat (фаза 4, задача 4.3): плановая синхронизация всех пользователей
+# каждые 6 часов — 00, 06, 12, 18 МСК. `expires` не даёт выполнить устаревший дубль из
+# очереди, если воркер отставал; сам прогон защищён батч-локом `sync:all:lock`.
+# Других записей здесь быть не должно: уведомления ставятся отложенными задачами (`eta`),
+# остальные задачи расписания — фазы 5–8.
+celery_app.conf.beat_schedule = {
+    "sync-all-users": {
+        "task": "bot.tasks.sync.sync_all_users",
+        "schedule": crontab(minute=0, hour="*/6"),
+        "options": {"expires": 3600},
+    },
+}
 
 
 # celery не поставляет типы, поэтому декоратор сигнала для mypy нетипизированный.

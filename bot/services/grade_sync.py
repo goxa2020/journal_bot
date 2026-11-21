@@ -14,6 +14,8 @@
 from __future__ import annotations
 import dataclasses
 import datetime as dt
+from collections.abc import Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -32,17 +34,25 @@ from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.services.grades import GradesService
 from bot.services.journals import upsert_and_link
 from bot.services.sync_logs import write_sync_log
-from bot.services.users import load_user_sync_info
+from bot.services.users import load_group_members, load_user_sync_info
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Sequence
+    from contextlib import AbstractAsyncContextManager
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from bot.database.models import Grade
     from bot.integrations.edu_tpi import EduTpiClient
     from bot.integrations.journal_cache import JournalCache
-    from bot.integrations.models import JournalBrief, Lesson
+    from bot.integrations.models import JournalBrief, JournalPayload, Lesson
     from bot.services.auth import TokenService
     from bot.services.users import UserSyncInfo
+
+#: Как взять `sync:lock:{user_id}` воркера (задачи передают `task_lock`).
+UserLockFactory = Callable[[int], "AbstractAsyncContextManager[bool]"]
+#: Постановка фонового уведомления о новых оценках (`send_grade_notification.delay`).
+GradeNotifier = Callable[[int, "Sequence[NewGradeNotice]"], None]
 
 
 SEPTEMBER = 9
@@ -134,6 +144,9 @@ class JournalSyncResult:
     error: str | None = None
     skipped: bool = False
     notices: list[NewGradeNotice] = field(default_factory=list)
+    #: Были ли у пользователя оценки этого журнала до дифа (задача 4.2): первичный
+    #: импорт не должен выглядеть как «новые оценки» в оппортунистической синхронизации.
+    had_existing: bool = False
 
 
 @dataclass(slots=True)
@@ -183,9 +196,14 @@ def _grade_changed(grade: Grade, lesson: Lesson) -> bool:
 
 
 class GradeSyncService:
-    """Синхронизация оценок одного пользователя."""
+    """Синхронизация оценок одного пользователя.
 
-    def __init__(
+    Диф одного журнала вынесен в :meth:`apply_payload`: его же использует групповая
+    синхронизация (`bot/services/group_sync.py`) и оппортунистическая часть (задача 4.2),
+    поэтому логика «новые/изменённые/upsert» существует в одном месте.
+    """
+
+    def __init__(  # noqa: PLR0913
         self,
         *,
         session: AsyncSession,
@@ -193,12 +211,20 @@ class GradeSyncService:
         cache: JournalCache,
         tokens: TokenService,
         sync_type: SyncType = SyncType.MANUAL,
+        opportunistic: bool = False,
+        user_lock: UserLockFactory | None = None,
+        notifier: GradeNotifier | None = None,
     ) -> None:
         self._session = session
         self._client = client
         self._cache = cache
         self._tokens = tokens
         self._sync_type = sync_type
+        #: Обновлять других участников группы тем же журналом (задача 4.2).
+        self._opportunistic = opportunistic
+        #: Чужой `sync:lock` не трогаем: идёт ручная синхронизация этого пользователя.
+        self._user_lock = user_lock
+        self._notifier = notifier
 
     async def sync_user(self, user_id: int) -> SyncSummary:  # noqa: C901, PLR0912, PLR0915
         """Синхронизировать все журналы пользователя и вернуть сводку."""
@@ -318,6 +344,27 @@ class GradeSyncService:
                 fio=user.full_name,
             ),
         )
+        result = await self.apply_payload(user, brief, payload)
+        if self._opportunistic:
+            await self._sync_group_peers(user, brief, payload)
+        return result
+
+    async def apply_payload(
+        self,
+        user: UserSyncInfo,
+        brief: JournalBrief,
+        payload: JournalPayload,
+    ) -> JournalSyncResult:
+        """Применить уже полученный журнал к одному пользователю и закоммитить.
+
+        Используется и ручной синхронизацией (`sync_user`), и групповой (фаза 4):
+        один запрос к edu-tpi обслуживает всю группу, а диф остаётся в одном месте.
+        """
+        edu_user_id = user.edu_user_id
+        if edu_user_id is None or user.group_id is None:
+            message = f"У пользователя {user.id} нет edu_user_id или group_id"
+            raise PermanentError(message)
+
         lessons = payload.lessons_for(
             edu_user_id,
             fio=user.full_name,
@@ -327,6 +374,7 @@ class GradeSyncService:
         incoming = [lesson for lesson in incoming if not lesson.is_empty]
 
         existing = await GradesService.load_lesson_map(self._session, user.id, brief.id)
+        had_existing = bool(existing)
         new_lessons = [lesson for lesson in incoming if lesson.key not in existing]
         changed = [
             (existing[lesson.key], lesson)
@@ -346,6 +394,7 @@ class GradeSyncService:
             name=brief.name,
             new_grades=len(new_lessons),
             updated_grades=len(changed),
+            had_existing=had_existing,
             notices=[
                 NewGradeNotice(
                     journal_id=brief.id,
@@ -361,6 +410,67 @@ class GradeSyncService:
                 for lesson in new_lessons
             ],
         )
+
+    async def _sync_group_peers(
+        self,
+        user: UserSyncInfo,
+        brief: JournalBrief,
+        payload: JournalPayload,
+    ) -> None:
+        """Оппортунистическая синхронизация участников группы (задача 4.2).
+
+        Журнал уже получен для текущего пользователя, поэтому остальным участникам
+        группы в том же `payload` он достаётся без запроса к edu-tpi. Уведомляем только
+        тех, у кого по этому журналу уже были оценки: первичный импорт молчит.
+        """
+        group_id = user.group_id
+        if group_id is None:
+            return
+
+        student_ids = set(payload.student_ids)
+        members = await load_group_members(self._session, group_id)
+
+        for member in members:
+            if member.id == user.id or member.edu_user_id is None or member.edu_user_id not in student_ids:
+                continue
+            try:
+                async with self._member_lock(member.id) as acquired:
+                    if not acquired:
+                        logger.info("opportunistic skipped: locked user={}", member.id)
+                        continue
+                    peer_result = await self.apply_payload(member, brief, payload)
+            except Exception:  # noqa: BLE001 — чужой журнал не должен валить синхронизацию
+                await self._rollback()
+                logger.exception("opportunistic sync failed user={} journal={}", member.id, brief.id)
+                continue
+
+            if peer_result.notices and peer_result.had_existing:
+                self._notify(member.id, peer_result.notices)
+            logger.info(
+                "opportunistic sync user={} journal={} new={} updated={}",
+                member.id,
+                brief.id,
+                peer_result.new_grades,
+                peer_result.updated_grades,
+            )
+
+    @asynccontextmanager
+    async def _member_lock(self, user_id: int) -> AsyncIterator[bool]:
+        """`sync:lock` участника группы; без фабрики блокировок — «всегда свободен»."""
+        if self._user_lock is None:
+            yield True
+            return
+        async with self._user_lock(user_id) as acquired:
+            yield acquired
+
+    def _notify(self, user_id: int, notices: Sequence[NewGradeNotice]) -> None:
+        """Поставить фоновое уведомление; ошибка брокера не отменяет сохранённые оценки."""
+        if self._notifier is None:
+            return
+        try:
+            self._notifier(user_id, notices)
+        except Exception:  # noqa: BLE001 — данные уже в БД, уведомление вторично
+            logger.exception("notification scheduling failed user={}", user_id)
 
     async def _rollback(self) -> None:
         """Откатить незавершённую транзакцию журнала, чтобы следующий журнал записался."""

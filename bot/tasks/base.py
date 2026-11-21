@@ -129,20 +129,32 @@ async def task_redis() -> AsyncIterator[Redis]:
 
 
 @asynccontextmanager
-async def task_lock(key: str, ttl: int = 300) -> AsyncIterator[bool]:
+async def task_lock(key: str, ttl: int = 300, *, release: bool = False) -> AsyncIterator[bool]:
     """Эксклюзивный lock задачи на `SET NX EX` (ARCHITECTURE §6.6).
 
     `key` — полный ключ Redis, например `sync:lock:{user_id}`. `yield False`, если ключ
     занят: задача выходит без ошибки (`task_acks_late` допускает повторы, второй запуск
-    по тому же пользователю просто пропускается). Lock не снимается вручную — его
-    время жизни ограничено `ttl`, чтобы падение воркера не оставило вечный замок.
+    по тому же пользователю просто пропускается).
+
+    `release=True` снимает lock после выхода из блока: так групповая синхронизация берёт
+    `sync:lock:{user_id}` только на время дифа пользователя, иначе ручная синхронизация
+    этого пользователя пропускалась бы до истечения `ttl`. По умолчанию lock не снимается
+    вручную — его время жизни ограничено `ttl`, чтобы падение воркера не оставило вечный
+    замок. Снятие тоже безопасно: `ttl` остаётся страховкой от падения процесса.
     """
     client = create_task_redis()
     try:
         acquired = bool(await client.set(key, LOCK_VALUE, nx=True, ex=ttl))
         if not acquired:
             logger.info("skipped: locked key={}", key)
-        yield acquired
+        try:
+            yield acquired
+        finally:
+            if acquired and release:
+                try:
+                    await client.delete(key)
+                except Exception:  # noqa: BLE001 — освобождение лока не должно валить задачу
+                    logger.exception("lock release failed key={}", key)
     finally:
         await client.aclose()
 

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-22 00:25+0300\n"
+"POT-Creation-Date: 2026-11-22 01:39+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -35,7 +35,7 @@ msgid "info button"
 msgstr "Info"
 
 #: bot/handlers/callback/settings.py:41 bot/handlers/callback/settings.py:48
-#: bot/handlers/message/settings.py:55
+#: bot/handlers/message/settings.py:57
 msgid "settings.login_required"
 msgstr "🔒 Log in to edu-tpi to change settings: /start"
 
@@ -44,7 +44,7 @@ msgid "stub.in_development"
 msgstr "🚧 In development"
 
 #: bot/handlers/callback/sync.py:28 bot/handlers/message/sync.py:66
-#: bot/tasks/sync.py:45
+#: bot/tasks/sync.py:54
 msgid "sync.auth_required"
 msgstr "🔒 Log in to edu-tpi: /start"
 
@@ -53,7 +53,7 @@ msgid "sync.started"
 msgstr "⏳ Synchronization started…"
 
 #: bot/handlers/callback/sync.py:34 bot/handlers/message/sync.py:71
-#: bot/tasks/sync.py:44
+#: bot/tasks/sync.py:53
 msgid "sync.already_running"
 msgstr "⏳ Synchronization is already running…"
 
@@ -123,25 +123,27 @@ msgstr "🔒 Log in to edu-tpi to see grades: /start"
 msgid "about"
 msgstr "ℹ️ <b>About</b>"
 
-#: bot/handlers/message/settings.py:32
+#: bot/handlers/message/settings.py:35
 msgid "settings.title"
 msgstr "⚙️ Notification settings"
 
-#: bot/handlers/message/settings.py:34
+#: bot/handlers/message/settings.py:37
 msgid "settings.notifications_line"
 msgstr "Notifications: {state}"
 
-#: bot/handlers/message/settings.py:35
+#: bot/handlers/message/settings.py:38
 msgid "settings.night_line"
 msgstr "Collect at night: {state}"
 
-#: bot/handlers/message/settings.py:36
+#: bot/handlers/message/settings.py:41
 msgid "settings.morning_line"
 msgstr "Morning summary time: {time}"
 
-#: bot/handlers/message/settings.py:38
+#: bot/handlers/message/settings.py:42
 msgid "settings.hint"
-msgstr "At night (22:00–07:59) new grades are collected and arrive as one message in the morning."
+msgstr ""
+"At night (22:00–07:59) new grades are collected and arrive as one message"
+" in the morning."
 
 #: bot/handlers/message/start.py:15
 msgid "welcome_back_1"
@@ -244,31 +246,35 @@ msgstr "on"
 msgid "settings.state_off"
 msgstr "off"
 
-#: bot/keyboards/inline/settings.py:34
+#: bot/keyboards/inline/settings.py:38
 msgid "settings.notifications_btn"
 msgstr "🔔 Notifications: {state}"
 
-#: bot/keyboards/inline/settings.py:38
+#: bot/keyboards/inline/settings.py:42
 msgid "settings.night_btn"
 msgstr "🌙 Collect at night: {state}"
 
-#: bot/keyboards/inline/settings.py:42
+#: bot/keyboards/inline/settings.py:47
 msgid "settings.morning_btn"
 msgstr "⏰ Morning: {time}"
 
-#: bot/keyboards/inline/settings.py:45
+#: bot/keyboards/inline/settings.py:50
 msgid "settings.menu_btn"
 msgstr "🏠 Main menu"
 
-#: bot/tasks/sync.py:46
+#: bot/tasks/sync.py:55
 msgid "sync.parse_failed"
 msgstr ""
 "⚠️ Could not parse the journal. Try again later; contact support if it "
 "repeats."
 
-#: bot/tasks/sync.py:47
+#: bot/tasks/sync.py:56
 msgid "sync.unavailable"
 msgstr "⚠️ The journal is unavailable, try again later."
+
+#: bot/tasks/sync.py:60
+msgid "sync.batch_alert"
+msgstr "⚠️ Scheduled sync: {failed} of {users} users failed (groups: {groups})."
 
 #: bot/utils/formatters.py:51
 msgid "last_grade"
@@ -276,67 +282,67 @@ msgstr ""
 "Last received grade:\n"
 "{} in subject \"{}\" for {}"
 
-#: bot/utils/formatters.py:72
+#: bot/utils/formatters.py:73
 msgid "grades.type_lecture"
 msgstr "L"
 
-#: bot/utils/formatters.py:74
+#: bot/utils/formatters.py:75
 msgid "grades.type_practice"
 msgstr "P"
 
-#: bot/utils/formatters.py:76
+#: bot/utils/formatters.py:77
 msgid "grades.type_lab"
 msgstr "Lab"
 
-#: bot/utils/formatters.py:89
+#: bot/utils/formatters.py:93
 msgid "grades.col_date"
 msgstr "Date"
 
-#: bot/utils/formatters.py:90
+#: bot/utils/formatters.py:94
 msgid "grades.col_value"
 msgstr "Grade/attendance"
 
-#: bot/utils/formatters.py:122
+#: bot/utils/formatters.py:126
 msgid "grades.average_none"
 msgstr "Average: —"
 
-#: bot/utils/formatters.py:123
+#: bot/utils/formatters.py:127
 msgid "grades.average"
 msgstr "Average: {0}"
 
-#: bot/utils/formatters.py:129
+#: bot/utils/formatters.py:133
 msgid "grades.journal_line_no_average"
 msgstr "• {0}"
 
-#: bot/utils/formatters.py:130
+#: bot/utils/formatters.py:134
 msgid "grades.journal_line"
 msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:159
+#: bot/utils/formatters.py:163
 msgid "notifications.title"
 msgstr "📊 New grades"
 
-#: bot/utils/formatters.py:163
+#: bot/utils/formatters.py:167
 msgid "notifications.line"
 msgstr "{date} — {name} — {value}"
 
-#: bot/utils/formatters.py:176
+#: bot/utils/formatters.py:180
 msgid "sync.summary"
 msgstr "📊 Sync complete: {new} new, {updated} updated."
 
-#: bot/utils/formatters.py:178
+#: bot/utils/formatters.py:182
 msgid "sync.no_changes"
 msgstr "✅ No changes."
 
-#: bot/utils/formatters.py:184
+#: bot/utils/formatters.py:188
 msgid "sync.partial_errors"
 msgstr "⚠️ Could not update journals: {count}."
 
-#: bot/utils/formatters.py:185
+#: bot/utils/formatters.py:189
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:187
+#: bot/utils/formatters.py:191
 msgid "sync.more_errors"
 msgstr "…and {count} more."
 
