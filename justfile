@@ -59,7 +59,7 @@ logs +args='':
 worker:
     docker compose up -d worker
 
-# Поднять Celery beat (расписание; пока пустое — фазы 3+)
+# Поднять Celery beat (sync_all_users каждые 6 часов; см. bot/celery_app.py)
 beat:
     docker compose up -d beat
 

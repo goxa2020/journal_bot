@@ -291,7 +291,12 @@ tests/
 дифа оценок, задач `sync_user_*`, `/sync`, `/grades`, `/logout` и форматтера таблицы.
 На фазе 3 — политика уведомлений (`tests/unit/test_notifications.py`), задачи
 `tests/unit/test_notify_tasks.py` (eager-режим, ночная очередь, ошибки Telegram) и экран
-`tests/unit/test_settings.py`. Всего 219 тестов.
+`tests/unit/test_settings.py`. На фазе 4 — групповая синхронизация
+(`tests/integration/test_group_sync.py`: один запрос на журнал/подгруппу, пустой журнал,
+ошибка авторизации участника, идемпотентность, занятый lock), задача батча
+(`tests/unit/test_sync_batch.py`: батч-лок, лимиты, метрики через `prometheus_client.REGISTRY`,
+алерт админам) и расписание/маршрут в `tests/integration/test_celery_smoke.py`.
+Всего 249 тестов.
 
 ```bash
 just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
@@ -343,6 +348,7 @@ uv run pytest -k notification -vv   # один срез
 | Уведомления не приходят, в логах `notification blocked` | пользователь заблокировал бота: `notification_enabled=False` | разблокировать бота и включить уведомления в `/settings` |
 | Ночью сообщение пришло сразу | выключено «копить ночью» или это ручная синхронизация | `/settings` → «Копить ночью: вкл»; ручная синхронизация отвечает сразу всегда |
 | `Error 11001 connecting to redis:6379` у воркера | воркер запущен локально, но читает `.env` с docker-хостами | локально — `just dev-worker` (`ENV_FILE=.env.local`); вручную: `ENV_FILE=.env.local uv run celery -A bot.celery_app worker ...` |
+| Батч пишет `sync_logs` с `journals=1` или `errors=unprocessed` | участник не сопоставлен с журналом | проверить `users.edu_user_id` и `full_name`: `userID` из `tokenauth` может не совпадать с `journalData.id`, сопоставление идёт по id, затем по ФИО |
 | `/healthz` не отвечает, `curl` висит | бот поднят в webhook-режиме или порт занят | в polling `/healthz` поднимает `bot/core/health.py` на `WEBHOOK_HOST:WEBHOOK_PORT`; проверить `docker compose port bot ${WEBHOOK_PORT}` и логи `health server` |
 | Порт занят | локальный сервис на 5433/6379/8080/3000 | изменить в `.env` или остановить локальный сервис |
 
@@ -381,6 +387,26 @@ docker compose exec worker python -c \
   "from bot.tasks.sync import sync_user_manual; sync_user_manual.delay(USER_ID)"
 docker compose logs -f worker        # сводка и sync_logs видны здесь
 ```
+
+Плановая синхронизация всех пользователей (задача 4.1, очередь `maintenance`):
+
+```bash
+docker compose exec worker python -c \
+  "from bot.tasks.sync import sync_all_users; print(sync_all_users.delay().get(timeout=900))"
+```
+
+Ответ — JSON: `status`, `groups`, `users`, `success`, `failed`, `skipped`, `new_grades`,
+`updated_grades`, `errors`, `duration_s`. Повторный запуск идемпотентен (новых оценок 0,
+оценки не дублируются). Занятый батч-лок даёт `{"status": "skipped", "reason": "locked"}`;
+снять его вручную: `docker compose exec redis redis-cli DEL sync:all:lock`. В логе —
+`sync batch started/finished`, по каждому пользователю пишется `sync_logs` с
+`sync_type=auto`. Beat ставит эту задачу каждые 6 часов (00/06/12/18 МСК) — расписание видно
+в контейнере: `docker compose exec beat python -c "from bot.celery_app import celery_app;
+print(celery_app.conf.beat_schedule)"`.
+
+Алерт админам (задача 4.4) проверяется только тестами: на проде он уйдёт владельцу.
+Условие — `users ≥ SYNC_ALERT_MIN_USERS` и доля `failed ≥ SYNC_ALERT_FAILURE_RATIO`
+(`.env`), сообщение одно на админа, только числа.
 
 Уведомления проверяются отдельными задачами (сообщение уходит в реальный Telegram):
 

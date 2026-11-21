@@ -241,7 +241,8 @@ bot/
 | `journal:{group_id}:{journal_id}:empty:{user_id}` | строка | 15 мин | журнал недоступен студенту (чужая подгруппа): не запрашиваем повторно |
 | `journal_legend:global` | JSON | 30 дней | `journalLegend` |
 | `grade_values:global` | JSON | 30 дней | справочник `journalVal` |
-| `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя |
+| `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя; батч снимает его сразу после дифа (`release=True`) |
+| `sync:all:lock` | строка | 1 ч | один прогон `sync_all_users` за раз; TTL — страховка от падения воркера |
 | `sync:queued:{user_id}` | строка | 30 с | защита от повторной постановки задачи при двойном нажатии «Обновить» |
 | `ratelimit:{user_id}` | счётчик | 60 с | лимит апдейтов от пользователя |
 | `notifications:night:{user_id}` | list | до утра + 2 ч | накопленные ночные оценки (JSON-записи) |
@@ -373,6 +374,9 @@ class EduTpiClient:
 | `collect_metrics` | `crontab(minute=5)` | каждый час |
 | `send_monthly_digest` | `crontab(minute=0, hour=12, day_of_month=31)` | после MVP |
 
+В коде сейчас включена только первая строка (`sync-all-users`): остальные появятся в фазах
+5–7 и будут добавляться в тот же `beat_schedule`.
+
 ### 6.5 Мост sync/async
 
 Celery-задачи синхронные, приложение — асинхронное. Правило:
@@ -427,6 +431,11 @@ async with Bot(settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=HTML)
   обязаны быть идемпотентными.
 - `sync_user_*` берут `sync:lock:{user_id}` (SET NX EX 300); не взяли — задача выходит без
   ошибки, в лог `sync skipped: locked`.
+- `sync_all_users` берёт батч-лок `sync:all:lock` (TTL 3600, снимается по завершении): второй
+  прогон выходит `{"status": "skipped", "reason": "locked"}`. Задача запускается с
+  `expires=3600`, `soft_time_limit=1800`, `time_limit=1900` — глобальные 300/250 с рассчитаны
+  на одного пользователя. Внутри батча per-user `sync:lock` берётся на время дифа участника и
+  сразу снимается, поэтому ручная синхронизация этого пользователя не ждёт TTL.
 - Вставка оценок — `INSERT ... ON CONFLICT (user_id, journal_id, date, hour_number) DO UPDATE`
   (после миграции §9).
 - Уведомления дедуплицируются `notify:sent:{user_id}:{lesson_key}` (SET NX EX 7 дней);
@@ -493,23 +502,43 @@ worker:
 ### 7.3 Плановая синхронизация групп
 
 ```
-beat 6ч → sync_all_users
-   users с is_authenticated → group_by(group_id)
+beat 6ч → sync_all_users (очередь maintenance, батч-лок sync:all:lock)
+   load_sync_candidates: is_authenticated, group_id и edu_user_id not null
+   group_by(group_id)
    для группы:
        unprocessed = {edu_user_id участников}
+       журналы = list_journals(токен первого участника; при 401 — следующего)  # один раз
        while unprocessed:
-           студент = любой из unprocessed
-           журналы = list_journals(его токен)
-           для журнала: get_journal (1 запрос на группу/подгруппу)
-               парсим всех студентов
-               для каждого пользователя бота из ответа:
-                   diff → upsert → уведомления
-               unprocessed -= {студенты из ответа}
+           лидер = минимальный edu_user_id из unprocessed
+           для каждого журнала:
+               payload = JournalCache.get_journal(токен лидера)   # 1 запрос на группу/подгруппу
+               для каждого участника группы из payload (кроме уже обработанных в этой паре):
+                   sync:lock(user) → apply_payload (диф + upsert + student_journal)
+                   → sync_logs(sync_type=auto) → send_grade_notification.delay(новые оценки)
+               unprocessed -= {студенты из payload}
+           unprocessed не уменьшился → warning, оставшиеся failed, выход из группы
 ```
 
-Оппортунистическая часть (сохранение оценок других участников группы) — после MVP:
-она даёт свежие данные тем, кто не запускал синхронизацию, но повышает риск ложных
-уведомлений, поэтому включается флагом `SYNC_OPPORTUNISTIC=true`.
+`apply_payload` — тот же диф, что у ручной синхронизации (`GradeSyncService`): он ищет
+студента в `payload` по `edu_user_id`, а при расхождении id — по ФИО (на проде `userID`
+из `tokenauth` бывает отрицательным и не совпадает с `journalData.id`). `unprocessed`
+отвечает только за то, нужен ли ещё один проход с токеном другой подгруппы; сам диф идёт
+по **всем** журналам группы, а набор `applied` не даёт обработать пару «участник + журнал»
+дважды.
+
+Ошибки: `EduEmptyJournalError` — пропуск (чужая подгруппа, архивный журнал),
+`EduAuthError` одного участника — он `failed`, остальные продолжают, `ParseError` журнала —
+ошибка журнала, `EduUnavailableError`/`EduRateLimitError` — ошибка группы/прогона. Если
+список журналов не получен ни для одной группы, задача бросает `RetryableError` и Celery
+повторяет батч (он идемпотентен). Один `EduTpiClient`, `JournalCache`, сессия и Redis на
+весь прогон, `TokenService` — на участника. Уведомления из батча — только
+`send_grade_notification.delay` (сводок и счётчиков нет), после коммита журнала.
+
+Оппортунистическая часть (задача 4.2, `SYNC_OPPORTUNISTIC=false` по умолчанию): после дифа
+текущего пользователя ручная синхронизация применяет тот же `payload` к другим участникам
+группы, которые в нём есть, под их `sync:lock` (занят — пропуск). Уведомление уходит только
+если по этому журналу у участника уже были оценки: первичный импорт молчит. В
+`sync_user_after_login` оппортунистическая часть не включается никогда.
 
 ### 7.4 Уведомления
 
@@ -535,6 +564,9 @@ send_night_batch: pop_night() (LRANGE+DEL) → одно сообщение сп�
 Ручная синхронизация ночью отвечает сразу: пользователь ждёт ответ на своё действие, и
 ночная политика к ней не применяется. Одна оценка — одно сообщение, много — список
 (дата, предмет с пометкой «Л»/«П», значение); «пинг-понгов» по одной оценке нет.
+Фоновая (групповая) синхронизация молчит, кроме новых оценок: после коммита журнала она
+ставит `send_grade_notification.delay(user_id, notices)` (то есть `manual=False`, ночью —
+в ночную очередь) и не шлёт ни сводок, ни счётчиков.
 Метрики: `notifications_total{kind,status}` и `sync_new_grades{type}` в
 [bot/core/metrics.py](../bot/core/metrics.py) (процесс воркера, HTTP-экспорт — фаза 8).
 
@@ -624,11 +656,20 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 |---|---|---|---|
 | `notifications_total` | Counter | `kind` (immediate/night), `status` (sent/skipped/failed/blocked) | `bot/tasks/notify.py` |
 | `sync_new_grades` | Counter | `type` (manual/auto) | `bot/tasks/sync.py` |
+| `sync_batch_users` | Counter | `status` (success/failed/skipped) | `bot/tasks/sync.py` |
+| `sync_batch_duration_seconds` | Histogram | — | `bot/tasks/sync.py` |
 | `celery_tasks`, `celery_task_failures`, `celery_task_duration_seconds` | Counter/Histogram | `task`, `status` | `bot/tasks/base.py` |
 
 Уведомления и синхронизации считаются в процессе воркера: HTTP-экспорт (`/metrics` бота их
 не видит) появится вместе с celery-exporter в фазе 8. `Counter` с именем `sync_new_grades`
 экспонируется как `sync_new_grades_total` — это поведение prometheus-client.
+
+Алерт админам (задача 4.4) — не метрика, а следствие метрик прогона: если пользователей в
+батче не меньше `SYNC_ALERT_MIN_USERS` и доля `failed` не меньше
+`SYNC_ALERT_FAILURE_RATIO`, `sync_all_users` отправляет **одно** сообщение каждому админу
+(`load_admin_ids` без кеша, `send_telegram_message` из воркера). Текст — gettext-ключ
+`sync.batch_alert` с числами `{users}`, `{failed}`, `{groups}`; имён и названий журналов в
+нём нет. Ошибка Telegram при алерте батч не роняет.
 
 Целевой набор:
 
@@ -714,5 +755,10 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 4. **Фаза 3 — сделано.** `NotificationService` (политика «день/ночь», дедупликация),
    задачи `send_grade_notification`/`send_night_batch`, ночная очередь в Redis, экран
    `/settings`, метрики `notifications_total`/`sync_new_grades` и worker-safe аналитика.
+5. **Фаза 4 — сделано.** `GroupSyncService` и `sync_all_users` в очереди `maintenance` по
+   расписанию beat (каждые 6 часов), батч-лок `sync:all:lock` и per-user lock со снятием
+   после дифа, вынесенный `GradeSyncService.apply_payload`, оппортунистическая синхронизация
+   за флагом `SYNC_OPPORTUNISTIC`, метрики `sync_batch_users`/`sync_batch_duration_seconds`
+   и алерт админам при массовых сбоях.
 
 После этого код соответствует этой схеме, и документ можно перевести в статус «реализовано».
