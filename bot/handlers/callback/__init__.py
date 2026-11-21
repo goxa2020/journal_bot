@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import auth, grades, info, stubs, sync
+from . import auth, grades, info, settings, stubs, sync
 
 
 def get_callback_handlers_router() -> Router:
@@ -8,6 +8,7 @@ def get_callback_handlers_router() -> Router:
     router.include_router(info.router)
     router.include_router(sync.router)
     router.include_router(grades.router)
+    router.include_router(settings.router)
     router.include_router(auth.router)
     router.include_router(stubs.router)
 

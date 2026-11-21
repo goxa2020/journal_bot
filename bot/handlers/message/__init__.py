@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from . import auth, export_users, grades, info, start, support, sync
+from . import auth, export_users, grades, info, settings, start, support, sync
 
 
 def get_message_handlers_router() -> Router:
@@ -11,6 +11,7 @@ def get_message_handlers_router() -> Router:
     router.include_router(export_users.router)
     router.include_router(auth.router)
     router.include_router(grades.router)
+    router.include_router(settings.router)
     router.include_router(sync.router)
 
     return router

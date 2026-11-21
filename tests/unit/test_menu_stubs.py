@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 from bot.handlers.callback.stubs import STUB_CALLBACKS, stub_handler
 from bot.keyboards.inline.menu import get_main_menu_keyboard
 
-IMPLEMENTED_CALLBACKS = {"grades", "update"}
+IMPLEMENTED_CALLBACKS = {"grades", "update", "settings"}
 
 
 async def test_authorized_menu_buttons_are_implemented_or_stubbed(monkeypatch, ru_locale) -> None:
@@ -15,7 +15,7 @@ async def test_authorized_menu_buttons_are_implemented_or_stubbed(monkeypatch, r
 
     assert callbacks
     assert callbacks <= set(STUB_CALLBACKS) | IMPLEMENTED_CALLBACKS
-    # Фаза 2 закрыла «Оценки» и «Обновить»: они больше не заглушки.
+    # Фаза 2 закрыла «Оценки» и «Обновить», фаза 3 — «Настройки».
     assert callbacks >= IMPLEMENTED_CALLBACKS
     assert not (IMPLEMENTED_CALLBACKS & set(STUB_CALLBACKS))
 
