@@ -25,13 +25,13 @@ class _Session:
         return _Result(self._rows)
 
 
-async def test_list_journals_filters_marks_and_sorts_by_last_date() -> None:
+async def test_list_journals_keeps_any_non_empty_records_and_sorts_by_last_date() -> None:
     session = _Session()
 
     await GradesService.list_journals(session, 1)  # type: ignore[arg-type]
 
     sql = str(session.statement)
-    assert "HAVING count(grades.number_value) >" in sql
+    assert "HAVING count(grades.id) >" in sql
     assert "ORDER BY max(grades.date) DESC" in sql
 
 
@@ -52,3 +52,21 @@ async def test_list_journals_maps_last_grade_date() -> None:
     assert len(journals) == 1
     assert journals[0].last_grade_date == dt.date(2026, 11, 20)
     assert journals[0].average == 4.5
+
+
+async def test_list_journals_keeps_attendance_only_journal() -> None:
+    row = SimpleNamespace(
+        id=2,
+        name="Разработка кода информационных систем",
+        teacher_name="",
+        type="Лек",
+        grades_count=1,
+        average=None,
+        last_grade_date=dt.date(2026, 11, 13),
+    )
+    session = _Session([row])
+
+    journals = await GradesService.list_journals(session, 1)  # type: ignore[arg-type]
+
+    assert [journal.id for journal in journals] == [2]
+    assert journals[0].average is None

@@ -172,10 +172,12 @@ class GradesService:
 
     @classmethod
     async def list_journals(cls, session: AsyncSession, user_id: int) -> list[JournalSummary]:
-        """Журналы пользователя с оценками, свежие — первыми.
+        """Журналы пользователя с любыми записями, свежие — первыми.
 
-        Журналы без числовых оценок (только посещаемость или пустые) не показываем:
-        пользователю нечего в них смотреть. Сортировка — по дате последней оценки.
+        Пустые клетки («присутствовал», id 6) синхронизация не сохраняет, поэтому
+        ``count(grades.id) > 0`` означает «есть хотя бы одна оценка или отметка
+        Н/У/Б/О». Журналы без записей не показываем: в них нечего смотреть.
+        Сортировка — по дате последней записи.
         """
         grade_join = and_(Grade.journal_id == Journal.id, Grade.user_id == user_id)
         query = (
@@ -193,7 +195,7 @@ class GradesService:
             .outerjoin(Grade, grade_join)
             .where(user_journal_association.c.user_id == user_id)
             .group_by(Journal.id, Journal.name, Journal.teacher_name, Journal.type)
-            .having(func.count(Grade.number_value) > 0)
+            .having(func.count(Grade.id) > 0)
             .order_by(func.max(Grade.date).desc(), Journal.name)
         )
         result = await session.execute(query)
