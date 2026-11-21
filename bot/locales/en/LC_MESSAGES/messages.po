@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-21 22:53+0300\n"
+"POT-Creation-Date: 2026-11-21 23:22+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -253,27 +253,31 @@ msgstr "Average: —"
 msgid "grades.average"
 msgstr "Average: {0}"
 
-#: bot/utils/formatters.py:132 bot/utils/formatters.py:138
+#: bot/utils/formatters.py:129
+msgid "grades.journal_line_no_average"
+msgstr "• {0}"
+
+#: bot/utils/formatters.py:130
 msgid "grades.journal_line"
 msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:147
+#: bot/utils/formatters.py:155
 msgid "sync.summary"
 msgstr "📊 Sync complete: {new} new, {updated} updated."
 
-#: bot/utils/formatters.py:149
+#: bot/utils/formatters.py:157
 msgid "sync.no_changes"
 msgstr "✅ No changes."
 
-#: bot/utils/formatters.py:155
+#: bot/utils/formatters.py:163
 msgid "sync.partial_errors"
 msgstr "⚠️ Could not update journals: {count}."
 
-#: bot/utils/formatters.py:156
+#: bot/utils/formatters.py:164
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:158
+#: bot/utils/formatters.py:166
 msgid "sync.more_errors"
 msgstr "…and {count} more."
 

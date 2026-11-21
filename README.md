@@ -42,7 +42,7 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
   метрики), задачи `sync_user_manual` и `sync_user_after_login`;
 - ✅ `/healthz` и `/metrics` у бота в обоих режимах (polling и webhook), healthcheck контейнера;
 - ✅ админ-панель Flask-Admin: вход по ролям, список пользователей;
-- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 151 тест,
+- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 153 теста,
   job «Run tests» в CI;
 - ✅ Docker Compose: бот, воркер, beat, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы,
   Prometheus, Grafana.

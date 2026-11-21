@@ -154,6 +154,39 @@ def test_journals_overview_truncates_long_names_to_50(ru_locale) -> None:
     assert all(len(line) <= TABLE_WIDTH for line in text.splitlines())
 
 
+def test_journals_overview_without_average_has_no_dashes(ru_locale) -> None:
+    journal = JournalSummary(
+        id=1,
+        name="Разработка кода информационных систем",
+        teacher_name="",
+        type="Пр",
+        grades_count=1,
+        average=None,
+    )
+
+    text = format_journals_overview([journal])
+
+    assert text == "• Разработка кода информационных систем П"
+    assert "—" not in text
+
+
+def test_journals_overview_without_average_truncates_long_name(ru_locale) -> None:
+    journal = JournalSummary(
+        id=1,
+        name="Очень длинное название предмета, которое точно не влезет в строку списка",
+        teacher_name="",
+        type="Лек",
+        grades_count=1,
+        average=None,
+    )
+
+    text = format_journals_overview([journal])
+
+    assert len(text) <= TABLE_WIDTH
+    assert text.endswith(" Л")
+    assert "—" not in text
+
+
 def test_sync_summary_without_errors(ru_locale) -> None:
     summary = SyncSummary(
         user_id=1,

@@ -123,20 +123,28 @@ def format_average(average: float | None) -> str:
     return _("grades.average").format(f"{average:.2f}")
 
 
+def _overview_line(name: str, average: str | None) -> str:
+    """Строка списка: без числовых оценок — только название, без «— —»."""
+    if average is None:
+        return _("grades.journal_line_no_average").format(name)
+    return _("grades.journal_line").format(name, average)
+
+
 def format_journals_overview(journals: Sequence[JournalSummary]) -> str:
     """Список журналов: название с пометкой вида и средний балл, строки до 50 символов."""
     lines: list[str] = []
     for journal in journals:
         name = journal_display_name(journal.name, journal.type)
-        average = f"{journal.average:.2f}" if journal.average is not None else EMPTY_CELL
-        line = _("grades.journal_line").format(name, average)
+        average = f"{journal.average:.2f}" if journal.average is not None else None
+        line = _overview_line(name, average)
         if len(line) > TABLE_WIDTH:
             # Обрезаем само название, а пометку вида («Л»/«П») сохраняем.
             excess = len(line) - TABLE_WIDTH
             base = _truncate(journal.name, max(1, len(journal.name) - excess))
             name = journal_display_name(base, journal.type)
-            line = _("grades.journal_line").format(name, average)
+            line = _overview_line(name, average)
         lines.append(line)
+    return "\n".join(lines)
     return "\n".join(lines)
 
 
