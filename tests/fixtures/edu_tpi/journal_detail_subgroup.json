@@ -1,0 +1,30 @@
+{
+  "data": {
+    "isSubGroup": true,
+    "journalID": 27919,
+    "journalVal": [
+      {"id": 10, "value": "5", "numberValue": 5.0, "isMark": true},
+      {"id": 11, "value": "Б  ", "isMark": false, "isPass": true}
+    ],
+    "journalData": [
+      {
+        "id": "1001",
+        "fio": "Студентов С.С.",
+        "fullName": "Студентов Степан Степанович",
+        "346734": "10",
+        "346950": "11"
+      }
+    ],
+    "journalDates": [
+      {"dateID": 346734, "date": "2024-09-30T000000", "hourNumber": 1},
+      {"dateID": 346950, "date": "2024-10-07T00:00:00", "hourNumber": 2}
+    ],
+    "journalLegend": {"Б  ": "Болезнь"},
+    "journalInfo": {
+      "dis": "Программирование",
+      "type": "Лек",
+      "teacherName": "Преподавателев П.П.",
+      "year": "2024-2025"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 # Архитектура Journal Bot
 
-**Версия:** 2.0 · **Дата:** 18.11.2026 · **Статус:** целевая архитектура; часть ещё не реализована
+**Версия:** 2.1 · **Дата:** 21.11.2026 · **Статус:** фазы 0–2 реализованы; целевая
+архитектура для фаз 3–8
 **Область:** Telegram-бот доступа к электронному журналу `edu-tpi.donstu.ru`
 
 Документ описывает, как система должна быть устроена. Текущее состояние кода и порядок работ —
@@ -76,9 +77,9 @@
 
 | Компонент | Технология | Ответственность | Состояние |
 |---|---|---|---|
-| `bot` | aiogram 3.24, aiohttp | Приём апдейтов, FSM, клавиатуры, тексты, постановка задач | Работает частично |
-| `worker` | Celery | Синхронизация, уведомления, обслуживание | Не реализован |
-| `beat` | Celery beat | Расписание периодических задач | Не реализован |
+| `bot` | aiogram 3.32, aiohttp | Приём апдейтов, FSM, клавиатуры, тексты, постановка задач | Работает |
+| `worker` | Celery | Синхронизация, уведомления, обслуживание | Синхронизация работает; уведомления — фаза 3 |
+| `beat` | Celery beat | Расписание периодических задач | Сервис работает, расписание пустое до фазы 4 |
 | `flower` | Flower | UI очередей и задач | Не реализован |
 | `admin` | Flask-Admin + Flask-Security | Просмотр и правка пользователей, журналов, логов | Работает, 1 экран |
 | `postgres` | PostgreSQL 14 | Постоянные данные | Работает |
@@ -114,7 +115,7 @@ handlers/ keyboards/ filters/          интерфейс: разбор апде
         │  (только вызов сервисов)
 services/                              прикладные сценарии, транзакции, политика
         │
-integrations/ (api_client, journal_parser)   внешний мир
+integrations/ (edu_tpi, journal_cache)   внешний мир
         │
 database/ (models, repositories)       доступ к данным
         │
@@ -167,7 +168,7 @@ bot/
 
 ### 4.1 PostgreSQL
 
-Схема на текущий момент (миграция `217e8389fd0e` — голова).
+Схема на текущий момент (голова — `2026_11_21_grades_v2`, 6 миграций).
 
 **`users`** — один Telegram-пользователь.
 
@@ -200,14 +201,19 @@ bot/
 
 | Поле | Назначение |
 |---|---|
-| `id` | **требует переделки**, см. §9 |
+| `id` | `BIGSERIAL`, суррогатный PK (миграция `2026_11_21_grades_v2`) |
 | `user_id` | FK → `users.id` |
 | `journal_id` | FK → `journals.id` |
 | `date` | дата занятия (DATE) |
+| `hour_number` | номер пары в этот день, вторая часть ключа урока |
+| `edu_lesson_id` | `dateID` из edu-tpi, информационное поле |
 | `value` | отображаемое значение: `1`–`5`, `Н`, `У`, `Б`, `О`, пусто |
 | `number_value` | 1–5 для оценок, NULL иначе |
 | `is_mark`, `is_pass`, `is_valid_pass` | флаги из `journalVal` |
 | `created_at`, `updated_at` | |
+
+Уникальность: `UNIQUE (user_id, journal_id, date, hour_number)`; индексы
+`(user_id, journal_id, date)` и `(journal_id)`.
 
 **`sync_logs`** — журнал синхронизаций: `user_id`, `sync_type`
 (`manual|auto|watch_mode`), `status` (`success|failed|in_progress|cancelled`),
@@ -257,8 +263,8 @@ bot/
 
 ### 5.1 Клиент
 
-Модуль `bot/integrations/edu_tpi.py` (сейчас — [bot/services/api_client.py](../bot/services/api_client.py)
-и [bot/services/journal_parser.py](../bot/services/journal_parser.py), их нужно слить):
+Модуль `bot/integrations/edu_tpi.py` (в фазе 2 заменил `services/api_client.py` и
+`services/journal_parser.py`; оба удалены):
 
 ```python
 class EduTpiClient:
@@ -526,7 +532,7 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 вторая запись по тому же занятию другого пользователя нарушит PK. Синхронизация на этой схеме
 работать не может.
 
-Целевая схема (миграция фазы 2):
+Целевая схема реализована миграцией `2026_11_21_grades_v2` (задача 2.1):
 
 | Изменение | Детали |
 |---|---|
@@ -663,10 +669,12 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 1. **Фаза 0 — сделано.** Ключ `accessToken` и перевод `expiresIn` из минут в секунды;
    обязательный `ENCRYPTION_KEY` и `encryption.py`; кеш `is_authorized`; удаление
    `journals.py`/`sync_logs.py` и reply-клавиатуры; `uvloop` только на Linux; каркас тестов
-   и 40 unit-тестов. Осталось: рефакторинг `auth.py` по слоям (2.2/2.4).
-2. **Фаза 1.** `celery_app.py`, `tasks/`, сервисы в compose, мост sync/async, `/healthz`.
-3. **Фаза 2.** Слияние `api_client` и `journal_parser` в `integrations/edu_tpi.py`;
-   `GradeSyncService`; миграция `grades`; экраны оценок.
+   и 40 unit-тестов.
+2. **Фаза 1 — сделано.** `celery_app.py`, `tasks/`, сервисы в compose, мост sync/async,
+   `/healthz`.
+3. **Фаза 2 — сделано.** Слияние `api_client` и `journal_parser` в `integrations/edu_tpi.py`;
+   кеш журналов и подгруппы; `TokenService`; `GradeSyncService`; миграция `grades`;
+   `/sync`, `/grades`, `/logout`.
 4. **Фаза 3.** `NotificationService` и политика «ночь → утро».
 
 После этого код соответствует этой схеме, и документ можно перевести в статус «реализовано».

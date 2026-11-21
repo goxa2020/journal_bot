@@ -20,10 +20,16 @@ Kwargs = Any
 
 
 def build_key(*args: Args, **kwargs: Kwargs) -> str:
-    """Build a string key based on provided arguments and keyword arguments."""
+    """Build a string key based on provided arguments and keyword arguments.
+
+    Хвостовое двоеточие не добавляется: `build_key("auth:token", 1)` даёт
+    `auth:token:1`, как и обещает docs/ARCHITECTURE.md §4.2.
+    """
     args_str = ":".join(map(str, args))
     kwargs_str = ":".join(f"{key}={value}" for key, value in sorted(kwargs.items()))
-    return f"{args_str}:{kwargs_str}"
+    if args_str and kwargs_str:
+        return f"{args_str}:{kwargs_str}"
+    return args_str or kwargs_str
 
 
 async def set_redis_value(

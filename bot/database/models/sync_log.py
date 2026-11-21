@@ -1,5 +1,5 @@
 from __future__ import annotations
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, ForeignKey, String
@@ -11,13 +11,13 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class SyncType(Enum):
+class SyncType(StrEnum):
     MANUAL = "manual"
     AUTO = "auto"
     WATCH_MODE = "watch_mode"
 
 
-class SyncStatus(Enum):
+class SyncStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     IN_PROGRESS = "in_progress"

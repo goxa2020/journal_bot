@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, update
@@ -10,6 +11,19 @@ from bot.database.models import User
 if TYPE_CHECKING:
     from aiogram.types import User as tg_User
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True, slots=True)
+class UserSyncInfo:
+    """Минимум полей пользователя, нужный синхронизации (без ORM-объекта в задаче)."""
+
+    id: int
+    is_authenticated: bool
+    edu_user_id: int | None
+    group_id: int | None
+    group_name: str | None
+    full_name: str | None
+    language_code: str | None
 
 
 async def add_user(
@@ -76,7 +90,7 @@ async def set_language_code(
 async def set_user_data(  # noqa: PLR0913, PLR0917
     session: AsyncSession,
     user_id: int,
-    edu_user_id: str | None = None,
+    edu_user_id: int | None = None,
     group_id: int | None = None,
     group_name: str | None = None,
     full_name: str | None = None,
@@ -153,7 +167,16 @@ async def get_user_count(session: AsyncSession) -> int:
 
 @cached(key_builder=lambda session, user_id: build_key(user_id))
 async def get_edu_credentials(session: AsyncSession, user_id: int) -> tuple[str | None, str | None]:
-    """Получить расшифрованные edu credentials пользователя."""
+    """Получить расшифрованные edu credentials пользователя (кеш бота)."""
+    return await load_edu_credentials(session, user_id)
+
+
+async def load_edu_credentials(session: AsyncSession, user_id: int) -> tuple[str | None, str | None]:
+    """Прочитать и расшифровать credentials без кеша.
+
+    Версия без `@cached` нужна Celery-задачам: они не имеют права обращаться к
+    глобальному Redis-клиенту бота (`bot.core.loader`).
+    """
     query = select(User.edu_login_encrypted, User.edu_password_encrypted).filter_by(id=user_id)
 
     result = await session.execute(query)
@@ -181,6 +204,50 @@ async def set_edu_credentials(session: AsyncSession, user_id: int, username: str
     await clear_cache(get_edu_credentials, user_id)
 
 
+async def clear_edu_credentials(session: AsyncSession, user_id: int) -> None:
+    """Удалить шифрованные credentials (выход из edu-tpi)."""
+    stmt = update(User).where(User.id == user_id).values(edu_login_encrypted=None, edu_password_encrypted=None)
+    await session.execute(stmt)
+    await session.commit()
+    await clear_cache(get_edu_credentials, user_id)
+
+
+async def mark_authenticated(session: AsyncSession, user_id: int, *, value: bool) -> None:
+    """Только флаг `is_authenticated`, без затирания остальных полей.
+
+    Версия без кеша: её использует воркер. Кеш `is_authorized` живёт 10 секунд и
+    обновится сам, а в процессе бота после изменения вызывается `set_user_data`.
+    """
+    stmt = update(User).where(User.id == user_id).values(is_authenticated=value)
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def update_user_identity(  # noqa: PLR0913
+    session: AsyncSession,
+    user_id: int,
+    *,
+    edu_user_id: int | None,
+    group_id: int | None,
+    group_name: str | None,
+    full_name: str | None,
+) -> None:
+    """Обновить данные студента после (пере)авторизации; версия для воркера."""
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .values(
+            edu_user_id=edu_user_id,
+            group_id=group_id,
+            group_name=group_name,
+            full_name=full_name,
+            is_authenticated=True,
+        )
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
 @cached(key_builder=lambda session, user_id: build_key(user_id))
 async def is_authorized(session: AsyncSession, user_id: int) -> bool:
     """Проверить, авторизован ли пользователь.
@@ -194,3 +261,40 @@ async def is_authorized(session: AsyncSession, user_id: int) -> bool:
 
     is_authenticated = result.scalar_one_or_none()
     return bool(is_authenticated)
+
+
+async def load_user_sync_info(session: AsyncSession, user_id: int) -> UserSyncInfo | None:
+    """Данные пользователя для синхронизации — одним запросом и без кеша."""
+    query = select(
+        User.id,
+        User.is_authenticated,
+        User.edu_user_id,
+        User.group_id,
+        User.group_name,
+        User.full_name,
+        User.language_code,
+    ).filter_by(id=user_id)
+    row = (await session.execute(query)).first()
+    if row is None:
+        return None
+    return UserSyncInfo(
+        id=row[0],
+        is_authenticated=bool(row[1]),
+        edu_user_id=row[2],
+        group_id=row[3],
+        group_name=row[4],
+        full_name=row[5],
+        language_code=row[6],
+    )
+
+
+async def logout_user(session: AsyncSession, user_id: int) -> None:
+    """Выход: удалить credentials и снять флаг авторизации.
+
+    Токен в Redis удаляет вызывающий (`bot.services.auth.delete_token`): у процесса
+    бота есть Redis-клиент, а у сервиса пользователей нет.
+    """
+    await clear_edu_credentials(session, user_id)
+    await mark_authenticated(session, user_id, value=False)
+    await clear_cache(is_authorized, user_id)
+    await clear_cache(get_full_name, user_id)

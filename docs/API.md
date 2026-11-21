@@ -2,8 +2,8 @@
 
 **Версия:** 1.0 · **Дата:** 18.11.2026
 **Источник:** ответы реального API, зафиксированные в [archive/technical-bot-architecture.md](archive/technical-bot-architecture.md),
-и реализация в [bot/services/api_client.py](../bot/services/api_client.py) и
-[bot/services/journal_parser.py](../bot/services/journal_parser.py).
+и реализация в [bot/integrations/edu_tpi.py](../bot/integrations/edu_tpi.py) (в фазе 2
+заменила `services/api_client.py` и `services/journal_parser.py`).
 
 > API неофициальный и не документирован. Всё ниже — наблюдения, а не контракт.
 > При расхождении с живыми ответами правится этот файл и тестовые фикстуры в `tests/fixtures/edu_tpi/`.
@@ -97,8 +97,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 | `data.id` | int | ID пользователя edu-tpi, совпадает с `user.userID` |
 | `data.userName` | string | краткое ФИО, для логов не нужно |
 
-**Критично для реализации:** ключ называется `accessToken` (camelCase), а не `access_token`.
-Текущий код читает `access_token` — это ошибка, задача 0.1 в [ROADMAP.md](ROADMAP.md).
+**Критично для реализации:** ключ называется `accessToken` (camelCase), а не
+`access_token` (исправлено в фазе 0, задача 0.1).
 
 **Ошибки**
 
@@ -268,6 +268,7 @@ journalDates[].hourNumber    ── номер пары в этот день
 | `date` иногда приходит как `...T000000` | в парсере есть замена на `T00:00:00` |
 | `journalVal` содержит служебные записи (пустые, `isMark=false`, `isPass=false`) | сохранять не нужно, но и падать нельзя |
 | порядок студентов в `journalData` не гарантирован | искать по `id`, а не по индексу |
+| архивный журнал: `200`, `state: -2`, `data: null` | не ошибка схемы: пропускаем журнал (`EduEmptyJournalError`), синхронизация продолжается |
 
 ### 6.3 Флаги и легенда
 
@@ -293,6 +294,7 @@ journalDates[].hourNumber    ── номер пары в этот день
 | Код/ситуация | Исключение | Retry | Действие |
 |---|---|---|---|
 | `200` с неожиданной структурой | `ParseError` | нет | лог, алерт админу, `sync_logs.status=failed` |
+| `200`, `state: -2`, `data: null` | `EduEmptyJournalError` | нет | журнал пропускается, синхронизация не падает |
 | `400/401/403` на входе | `EduAuthError` | нет | «логин или пароль неверны» |
 | `401` на защищённом методе | `EduTokenExpired` | 1 раз | переавторизация по сохранённым данным |
 | `401` после переавторизации | `EduAuthError` | нет | сбросить токен, попросить войти заново |
@@ -305,17 +307,17 @@ journalDates[].hourNumber    ── номер пары в этот день
 
 ## 8. Соответствие клиенту
 
-| Метод `EduTpiClient` (целевой) | Эндпоинт | Сейчас в коде |
+| Метод `EduTpiClient` (целевой) | Эндпоинт | Реализация (фаза 2) |
 |---|---|---|
-| `get_fingerprint()` | `GET /api/UserInfo/Devices/RandomIdentity` | ✅ `api_client.get_fingerprint` |
-| `authorize(login, password)` | `POST /api/tokenauth` | 🟡 `api_client.auth_post` |
-| `get_user_info(token)` | `GET /api/tokenauth` | ✅ `api_client.get_auth_data` |
-| `list_journals(token, year, sem)` | `GET /api/Journals/JournalList` | 🟡 внутри `JournalParser.parse_grades` |
-| `get_journal(token, journal_id)` | `GET /api/Journals/Journal` | 🟡 внутри `JournalParser.parse_grades` |
-| `parse_lessons(payload, edu_user_id)` | — (локально) | 🟡 `JournalParser.get_student_lessons_last_days_from_journal` |
+| `get_fingerprint()` | `GET /api/UserInfo/Devices/RandomIdentity` | ✅ `bot/integrations/edu_tpi.py` |
+| `authorize(login, password)` | `POST /api/tokenauth` | ✅ `TokenInfo` |
+| `get_user_info(token)` | `GET /api/tokenauth` | ✅ `EduUser` |
+| `list_journals(token, year, sem)` | `GET /api/Journals/JournalList` | ✅ `JournalBrief` |
+| `get_journal(token, journal_id)` | `GET /api/Journals/Journal` | ✅ `JournalPayload` |
+| `parse_lessons(payload, edu_user_id)` | — (локально) | ✅ `JournalPayload.lessons_for` |
 
-Целевой рефакторинг — задача 2.2 в [ROADMAP.md](ROADMAP.md): один клиент, запросы отдельно
-от разбора, ответы — типизированные объекты.
+Рефакторинг задачи 2.2 выполнен: один клиент, запросы отдельно от разбора, ответы —
+типизированные объекты `bot/integrations/models.py`.
 
 ---
 
@@ -354,6 +356,6 @@ curl -s -G https://edu-tpi.donstu.ru/api/Journals/Journal \
 1. Сохранить обезличенный ответ в `tests/fixtures/edu_tpi/`.
 2. Обновить этот файл: поле, тип, что делаем.
 3. Поправить парсер и добавить/обновить тест.
-4. Прогнать `pytest tests/unit/test_journal_parser.py`.
+4. Прогнать `pytest tests/unit/test_edu_tpi_client.py`.
 5. Проверить на реальном аккаунте `/sync` и `/grades`.
 6. Отметить в [ROADMAP.md](ROADMAP.md), если задача меняет объём.

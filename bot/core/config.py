@@ -23,12 +23,6 @@ TIMEZONE = ZoneInfo("Europe/Moscow")
 # Какой env-файл читать. Для локального запуска: ENV_FILE=.env.local
 ENV_FILE = os.getenv("ENV_FILE", ".env")
 
-BASE_URL = "https://edu-tpi.donstu.ru"
-AUTH_URL = f"{BASE_URL}/api/tokenauth"
-FP_URL = f"{BASE_URL}/api/UserInfo/Devices/RandomIdentity"
-JOURNALS_URL = f"{BASE_URL}/api/Journals/JournalList"
-JOURNAL_URL = f"{BASE_URL}/api/Journals/Journal"
-
 
 class EnvBaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")

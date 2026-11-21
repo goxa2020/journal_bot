@@ -1,0 +1,13 @@
+{
+  "state": 1,
+  "data": {
+    "userName": "student@donstu.ru",
+    "user": {
+      "userID": 1001,
+      "groupID": 3273,
+      "group": "584 ис-3",
+      "fio": "Студентов С.С.",
+      "fullName": "Студентов Степан Степанович"
+    }
+  }
+}

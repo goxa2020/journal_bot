@@ -5,12 +5,16 @@ from aiogram import Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.i18n import gettext as _
+from loguru import logger
 
 from bot.core.encryption import decrypt, encrypt
+from bot.core.errors import EduUnavailableError
+from bot.core.loader import redis_client
 from bot.keyboards.inline.auth import get_auth_error_keyboard, get_cancel_inline_keyboard
 from bot.keyboards.inline.menu import get_main_menu_keyboard
-from bot.services.api_client import EduUnavailableError
-from bot.services.auth import edit_bot_message, handle_auth_login, handle_auth_password
+from bot.services.auth import delete_token, edit_bot_message, handle_auth_login, handle_auth_password
+from bot.services.users import logout_user
+from bot.tasks.sync import sync_user_after_login
 from bot.utils.main_menu import get_main_menu
 
 if TYPE_CHECKING:
@@ -119,6 +123,30 @@ async def run_auth_attempt(
         bot_message_id,
         prefix=f"{_('auth.success')}\n\n",
     )
+    # Первая синхронизация — в фоне: пользователь не ждёт обхода журналов.
+    # Недоступный брокер не должен ломать уже успешный вход.
+    try:
+        sync_user_after_login.delay(user_id)
+    except Exception:  # noqa: BLE001 — вход важнее фоновой задачи
+        logger.exception("sync after login enqueue failed user={}", user_id)
+
+
+@router.message(Command("logout"))
+async def logout_handler(
+    message: Message,
+    session: AsyncSession,
+) -> None:
+    """Выйти из edu-tpi: токен, шифрованные креды и флаг авторизации."""
+    if not message.from_user:
+        return
+    user_id = message.from_user.id
+
+    await delete_token(redis_client, user_id)
+    await logout_user(session, user_id)
+
+    kb = await get_main_menu_keyboard(session, user_id)
+    text = _("logout.done") + "\n\n" + await get_main_menu(session, user_id)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.message(Command("cancel"))

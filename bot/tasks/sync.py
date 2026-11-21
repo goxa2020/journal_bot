@@ -1,0 +1,149 @@
+"""Задачи синхронизации оценок (задача 2.6, docs/ARCHITECTURE.md §6.3).
+
+Обе задачи идут в очередь `sync` по имени (`bot.tasks.sync.*`, маршрут уже настроен в
+`bot/celery_config.py`), берут `sync:lock:{user_id}` и работают со своими Redis/сессией/
+клиентом внутри `run_async`. Глобальные объекты бота не используются.
+
+Синхронизация идемпотентна: повторный запуск после `acks_late` не создаёт дубликатов
+(`ON CONFLICT` по ключу урока и по id журнала).
+"""
+
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+
+from loguru import logger
+
+from bot.cache.redis import build_key
+from bot.celery_app import celery_app
+from bot.core.errors import (
+    EduAuthError,
+    EduRateLimitError,
+    EduUnavailableError,
+    ParseError,
+    PermanentError,
+    RetryableError,
+)
+from bot.database.models.sync_log import SyncType
+from bot.integrations.edu_tpi import EduTpiClient
+from bot.integrations.journal_cache import JournalCache
+from bot.services.auth import TokenService
+from bot.services.grade_sync import GradeSyncService, SyncSummary
+from bot.services.users import load_user_sync_info
+from bot.tasks.base import BaseTask, run_async, send_telegram_message, task_lock, task_redis, task_session
+from bot.utils.formatters import format_sync_summary
+from bot.utils.misc import n_
+from bot.utils.translations import translate
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+USER_MESSAGES = {
+    "locked": n_("sync.already_running"),
+    "auth": n_("sync.auth_required"),
+    "parse": n_("sync.parse_failed"),
+    "unavailable": n_("sync.unavailable"),
+}
+
+
+async def _user_language(session: AsyncSession, user_id: int) -> str | None:
+    user = await load_user_sync_info(session, user_id)
+    return user.language_code if user else None
+
+
+async def _run_sync(
+    user_id: int,
+    *,
+    sync_type: SyncType,
+) -> tuple[SyncSummary | None, str | None, str | None]:
+    """Выполнить синхронизацию; вернуть (сводка, код ошибки, язык пользователя).
+
+    `None` вместо сводки означает, что синхронизация не состоялась: занятый lock,
+    ошибка авторизации, разбора или недоступность edu-tpi.
+    """
+    async with task_lock(build_key("sync:lock", user_id)) as acquired:
+        if not acquired:
+            return None, "locked", None
+
+        async with task_redis() as redis, task_session() as session:
+            language = await _user_language(session, user_id)
+            async with EduTpiClient(redis=redis) as client:
+                tokens = TokenService(redis=redis, session=session, user_id=user_id, client=client)
+                cache = JournalCache(redis, client)
+                service = GradeSyncService(
+                    session=session,
+                    client=client,
+                    cache=cache,
+                    tokens=tokens,
+                    sync_type=sync_type,
+                )
+                try:
+                    summary = await service.sync_user(user_id)
+                except EduAuthError:
+                    return None, "auth", language
+                except ParseError:
+                    return None, "parse", language
+                except (EduUnavailableError, EduRateLimitError):
+                    return None, "unavailable", language
+                return summary, None, language
+
+
+def _summary_message(summary: SyncSummary, language: str | None) -> str:
+    return format_sync_summary(summary, translate=lambda text: translate(language, text))
+
+
+def _is_out_of_retries(task: BaseTask) -> bool:
+    return int(task.request.retries) >= int(task.max_retries)
+
+
+@celery_app.task(base=BaseTask, bind=True, name="bot.tasks.sync.sync_user_manual")  # type: ignore[untyped-decorator]
+def sync_user_manual(self: BaseTask, user_id: int) -> dict[str, Any]:
+    """Синхронизация по кнопке «Обновить»: по завершении — сводка пользователю."""
+    summary, error, language = run_async(_run_sync(user_id, sync_type=SyncType.MANUAL))
+
+    if error == "locked":
+        run_async(send_telegram_message(user_id, translate(language, USER_MESSAGES["locked"])))
+        return {"status": "skipped", "reason": "locked"}
+
+    if error is not None:
+        text = translate(language, USER_MESSAGES[error])
+        if error == "unavailable":
+            if not _is_out_of_retries(self):
+                # Пока есть повторы, не шлём «недоступен»: следующая попытка может успеть.
+                logger.warning("sync unavailable user={} retry={}", user_id, self.request.retries)
+                raise RetryableError(text)
+            run_async(send_telegram_message(user_id, text))
+            return {"status": "failed", "reason": "unavailable"}
+
+        run_async(send_telegram_message(user_id, text))
+        raise PermanentError(text)
+
+    if summary is None:  # pragma: no cover — защита от рассинхронизации веток
+        message = "Синхронизация завершилась без результата"
+        raise PermanentError(message)
+
+    run_async(send_telegram_message(user_id, _summary_message(summary, language)))
+    return summary.as_dict()
+
+
+@celery_app.task(base=BaseTask, bind=True, name="bot.tasks.sync.sync_user_after_login")  # type: ignore[untyped-decorator]
+def sync_user_after_login(self: BaseTask, user_id: int) -> dict[str, Any]:
+    """Первая синхронизация после входа: без сообщения об успехе."""
+    summary, error, language = run_async(_run_sync(user_id, sync_type=SyncType.AUTO))
+
+    if error == "locked":
+        return {"status": "skipped", "reason": "locked"}
+
+    if error is not None:
+        text = translate(language, USER_MESSAGES[error])
+        logger.warning("sync after login failed user={} error={}", user_id, error)
+        if error == "unavailable" and not _is_out_of_retries(self):
+            raise RetryableError(text)
+        if error == "unavailable":
+            return {"status": "failed", "reason": "unavailable"}
+        raise PermanentError(text)
+
+    if summary is None:  # pragma: no cover
+        message = "Синхронизация завершилась без результата"
+        raise PermanentError(message)
+
+    return summary.as_dict()

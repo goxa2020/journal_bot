@@ -5,10 +5,9 @@ from unittest.mock import AsyncMock
 import aiohttp
 import pytest
 
-from bot.cache.redis import build_key
-from bot.core.config import AUTH_URL, FP_URL
-from bot.services.api_client import EduUnavailableError
-from bot.services.auth import authenticate_user, handle_auth_login, handle_auth_password
+from bot.core.errors import EduAuthError, EduUnavailableError
+from bot.integrations.edu_tpi import AUTH_URL, FP_URL, EduTpiClient
+from bot.services.auth import authenticate_user, handle_auth_login, handle_auth_password, token_key
 
 TOKEN_PAYLOAD = {
     "data": {"accessToken": "token-123", "expiresIn": 10080.0, "id": -22069},
@@ -24,11 +23,12 @@ FINGERPRINT_PAYLOAD = {"data": {"randomIdentity": "fp-1"}, "state": 1}
 
 
 class _FakeResponse:
-    """Минимальный ответ aiohttp: статус, json и raise_for_status."""
+    """Минимальный ответ aiohttp: статус, json и заголовки."""
 
-    def __init__(self, status: int = 200, payload: Any = None) -> None:
+    def __init__(self, status: int = 200, payload: Any = None, headers: dict[str, str] | None = None) -> None:
         self.status = status
         self._payload = payload
+        self.headers = headers or {}
 
     @property
     def ok(self) -> bool:
@@ -36,10 +36,6 @@ class _FakeResponse:
 
     async def json(self, **_kwargs: Any) -> Any:
         return self._payload
-
-    def raise_for_status(self) -> None:
-        if self.status >= 400:
-            raise aiohttp.ClientResponseError(None, (), status=self.status)
 
     async def __aenter__(self) -> Self:
         return self
@@ -54,14 +50,11 @@ class _FakeSession:
     def __init__(self, routes: dict[tuple[str, str], _FakeResponse | Exception]) -> None:
         self._routes = routes
 
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(self, *_exc: object) -> None:
+    async def close(self) -> None:
         return None
 
-    def _route(self, method: str, url: str) -> _FakeResponse:
-        route = self._routes.get((method, url))
+    def request(self, method: str, url: str, **_kwargs: Any) -> _FakeResponse:
+        route = self._routes.get((method, str(url)))
         if route is None:
             msg = f"unexpected request: {method} {url}"
             raise AssertionError(msg)
@@ -69,17 +62,11 @@ class _FakeSession:
             raise route
         return route
 
-    def get(self, url: str, **_kwargs: Any) -> _FakeResponse:
-        return self._route("GET", str(url))
-
-    def post(self, url: str, **_kwargs: Any) -> _FakeResponse:
-        return self._route("POST", str(url))
-
 
 def _install(monkeypatch: pytest.MonkeyPatch, routes: dict[tuple[str, str], _FakeResponse | Exception]) -> None:
     """Подменить HTTP-слой edu-tpi; respx не умеет aiohttp, поэтому стаб свой."""
     monkeypatch.setattr(
-        "bot.services.api_client.aiohttp.ClientSession",
+        "bot.integrations.edu_tpi.aiohttp.ClientSession",
         lambda **_kwargs: _FakeSession(routes),
     )
 
@@ -116,7 +103,7 @@ async def test_authenticate_user_with_network_error_raises_unavailable(monkeypat
         await authenticate_user("student@donstu.ru", "secret")
 
 
-async def test_authenticate_user_with_valid_credentials_returns_token_data(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_authenticate_user_with_valid_credentials_returns_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(
         monkeypatch,
         {
@@ -125,10 +112,26 @@ async def test_authenticate_user_with_valid_credentials_returns_token_data(monke
         },
     )
 
-    data = await authenticate_user("student@donstu.ru", "secret")
+    token = await authenticate_user("student@donstu.ru", "secret")
 
-    assert data is not None
-    assert data["accessToken"] == "token-123"
+    assert token is not None
+    assert token.access_token == "token-123"
+    assert token.expires_in_minutes == 10080.0
+    assert token.edu_user_id == -22069
+
+
+async def test_client_raises_auth_error_on_forbidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install(
+        monkeypatch,
+        {
+            ("GET", FP_URL): _FakeResponse(payload=FINGERPRINT_PAYLOAD),
+            ("POST", AUTH_URL): _FakeResponse(status=403),
+        },
+    )
+
+    async with EduTpiClient() as client:
+        with pytest.raises(EduAuthError):
+            await client.authorize("student@donstu.ru", "secret")
 
 
 async def test_handle_auth_login_accepts_valid_email() -> None:
@@ -163,7 +166,7 @@ async def test_handle_auth_password_stores_token_with_correct_ttl(
         },
     )
 
-    success, user_data = await handle_auth_password(
+    success, user = await handle_auth_password(
         user_id=1,
         login="student@donstu.ru",
         password="secret",
@@ -171,12 +174,13 @@ async def test_handle_auth_password_stores_token_with_correct_ttl(
     )
 
     assert success is True
-    assert user_data == USER_PAYLOAD["data"]["user"]
+    assert user is not None
+    assert user.user_id == -22069
 
     # expiresIn приходит в минутах: 10080 * 60 − 300 секунд запаса
-    token_key = build_key("auth:token", 1)
-    assert await fake_redis.ttl(token_key) == 604500
-    token_payload = await fake_redis.get(token_key)
+    key = token_key(1)
+    assert await fake_redis.ttl(key) == 604500
+    token_payload = await fake_redis.get(key)
     assert token_payload is not None
     assert b"token-123" in token_payload
 
@@ -193,7 +197,7 @@ async def test_handle_auth_password_returns_failure_without_token(monkeypatch: p
         },
     )
 
-    success, user_data = await handle_auth_password(
+    success, user = await handle_auth_password(
         user_id=1,
         login="student@donstu.ru",
         password="secret",
@@ -201,7 +205,7 @@ async def test_handle_auth_password_returns_failure_without_token(monkeypatch: p
     )
 
     assert success is False
-    assert user_data is None
+    assert user is None
 
 
 async def test_handle_auth_password_propagates_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

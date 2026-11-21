@@ -229,6 +229,9 @@ Git-хуки подключены на [.githooks/pre-commit](../.githooks/pre-c
 
 ## 5. Миграции
 
+Голова — `2026_11_21_grades_v2` (фаза 2: суррогатный PK `grades`, `hour_number`,
+`edu_lesson_id`, уникальный ключ урока).
+
 ```bash
 # создать (в контейнере — чтобы совпадали зависимости)
 docker compose exec bot alembic revision --autogenerate -m "add hour_number to grades"
@@ -264,8 +267,8 @@ just babel-compile    # .po → .mo
 1. В коде — `_("ключ")` или `n_("ключ")`.
 2. `just babel` — строка попадает в `.pot` и в `.po` с пустым `msgstr`.
 3. Заполнить `msgstr` в `ru` и `en`.
-4. `just babel-compile` и **закоммитить `.po` и `.mo`** (`.mo` уже в репозитории; Docker
-   компилирует их заново при сборке).
+4. `just babel-compile` и закоммитить `.po` — `.mo` в git не попадает (`.gitignore`), его
+   компилирует Dockerfile и CI отдельным шагом.
 5. Проверить в Telegram оба языка (язык берётся из `users.language_code`, по умолчанию `ru`).
 
 Новая локаль: `pybabel init -i bot/locales/messages.pot -d bot/locales -D messages -l <код>`,
@@ -278,9 +281,15 @@ just babel-compile    # .po → .mo
 ```
 tests/
 ├── conftest.py              # env для Settings, fakeredis, русская локаль, стабы
-├── unit/                    # TTL, шифрование, кеш users, вход, форматтеры
+├── fakes.py                 # стаб aiohttp.ClientSession и фикстуры edu-tpi
+├── fixtures/edu_tpi/        # обезличенные ответы API
+├── unit/                    # TTL, шифрование, кеш, вход, синхронизация, форматтеры
 └── integration/             # сценарии Celery eager — фаза 1
 ```
+
+На фазе 2 добавлены тесты клиента edu-tpi, кеша/подгрупп, токена и переавторизации,
+дифа оценок, задач `sync_user_*`, `/sync`, `/grades`, `/logout` и форматтера таблицы.
+Всего 143 теста.
 
 ```bash
 just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
@@ -361,6 +370,14 @@ docker compose exec worker python -c \
   "from bot.tasks.service import ping; print(ping.delay().get(timeout=10))"
 ```
 
+Синхронизация конкретного пользователя (id — Telegram user id из `users.id`):
+
+```bash
+docker compose exec worker python -c \
+  "from bot.tasks.sync import sync_user_manual; sync_user_manual.delay(USER_ID)"
+docker compose logs -f worker        # сводка и sync_logs видны здесь
+```
+
 Smoke-задача `bot.tasks.service.ping` не пишет в БД и не ходит в Telegram: если она не отвечает
 `pong`, проблема в брокере или воркере, а не в задаче.
 
@@ -399,7 +416,7 @@ Flower и celery-exporter появятся в фазе 8: до этого мет
 
 ```
 journal_bot/
-├── bot/                 код бота (handlers, services, database, locales)
+├── bot/                 код бота (handlers, services, integrations, database, locales)
 ├── admin/               Flask-Admin: шаблоны, вьюхи, gunicorn
 ├── docs/                документация: архитектура, план, API, разработка
 │   └── archive/         старые документы (не актуальны)

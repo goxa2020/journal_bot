@@ -29,9 +29,11 @@ TEST_ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]
 
 @pytest.fixture
 async def fake_redis(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[fakeredis.aioredis.FakeRedis]:
-    """Подменяет redis-клиент модуля кеша; ключи живут только внутри теста."""
+    """Подменяет redis-клиенты модулей; ключи живут только внутри теста."""
     client = fakeredis.aioredis.FakeRedis(decode_responses=False)
     monkeypatch.setattr("bot.cache.redis.redis_client", client)
+    # Тот же клиент под именем loader: им пользуются обработчики входа и /logout.
+    monkeypatch.setattr("bot.core.loader.redis_client", client)
     yield client
     await client.aclose()
 

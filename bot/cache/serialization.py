@@ -35,6 +35,6 @@ class JSONSerializer(AbstractSerializer):
         return orjson.dumps(obj)
 
     @staticmethod
-    def deserialize(obj: str) -> Any:
+    def deserialize(obj: bytes | str) -> Any:
         """Deserialize values using JSON."""
         return orjson.loads(obj)

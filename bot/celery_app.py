@@ -18,15 +18,15 @@ from celery.signals import worker_process_init
 
 from bot.celery_config import APP_NAME, CELERY_CONFIG, TASK_ROUTES
 
-celery_app = Celery(APP_NAME, include=["bot.tasks.service"])
+celery_app = Celery(APP_NAME, include=["bot.tasks.service", "bot.tasks.sync"])
 celery_app.config_from_object(CELERY_CONFIG, namespace=None)
 
 # Маршрутизация: см. bot/celery_config.py (по именам задач, а не по объектам).
 celery_app.conf.task_routes = TASK_ROUTES
 
-# Расписание пустое осознанно: задачи синхронизации/уведомлений появятся в фазах 2–3,
-# cleanup и сбор метрик — в фазе 8 (ARCHITECTURE §6.4). Beat в этой фазе только
-# проверяется как сервис.
+# Расписание пустое осознанно: автоматическая синхронизация — фаза 4, cleanup и
+# сбор метрик — фаза 8 (ARCHITECTURE §6.4). Beat в этой фазе только проверяется
+# как сервис; задачи синхронизации запускаются вручную и после входа.
 celery_app.conf.beat_schedule = {}
 
 

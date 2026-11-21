@@ -1,0 +1,45 @@
+{
+  "data": {
+    "isSubGroup": false,
+    "journalID": 27919,
+    "journalVal": [
+      {"id": 6, "value": "", "isMark": false, "isPass": false},
+      {"id": 7, "value": "Н  ", "isMark": false, "isPass": true},
+      {"id": 10, "value": "4", "numberValue": 4.0, "isMark": true},
+      {"id": 11, "value": "У  ", "isMark": false, "isPass": true}
+    ],
+    "journalData": [
+      {
+        "id": "1001",
+        "fio": "Студентов С.С.",
+        "fullName": "Студентов Степан Степанович",
+        "346734": "10",
+        "346950": "7"
+      },
+      {
+        "id": "1002",
+        "fio": "Второй В.В.",
+        "fullName": "Второй Виктор Викторович",
+        "346734": "6",
+        "346950": "11"
+      }
+    ],
+    "journalDates": [
+      {"dateID": 346734, "date": "2024-09-30T00:00:00", "hourNumber": 1},
+      {"dateID": 346950, "date": "2024-10-07T00:00:00", "hourNumber": 2}
+    ],
+    "journalLegend": {
+      "   ": "Студент отсутствовал",
+      "Н  ": "Студент отсутствовал",
+      "Б  ": "Болезнь",
+      "О  ": "Опоздал",
+      "У  ": "Уважительная причина"
+    },
+    "journalInfo": {
+      "dis": "Программирование",
+      "type": "Лек",
+      "teacherName": "Преподавателев П.П.",
+      "year": "2024-2025"
+    }
+  }
+}

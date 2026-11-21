@@ -7,75 +7,112 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-02-08 23:27+0300\n"
+"POT-Creation-Date: 2026-11-21 19:37+0300\n"
 "PO-Revision-Date: 2024-01-15 12:59+0400\n"
 "Last-Translator: \n"
 "Language: ru\n"
 "Language-Team: ru <LL@li.org>\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.17.0\n"
+"Generated-By: Babel 2.18.0\n"
 
-#: bot/handlers/callback/auth.py:28
+#: bot/handlers/callback/auth.py:38 bot/handlers/message/auth.py:54
 msgid "auth.enter_login"
 msgstr "📧 Введите edu email (логин):"
+
+#: bot/handlers/callback/auth.py:79 bot/handlers/message/auth.py:157
+msgid "cancelled"
+msgstr "❌ Действие отменено."
+
+#: bot/handlers/callback/grades.py:74 bot/handlers/callback/grades.py:80
+msgid "grades.not_found"
+msgstr "Журнал не найден."
 
 #: bot/handlers/callback/info.py:10
 msgid "info button"
 msgstr "ℹ️ Информация"
 
-#: bot/handlers/message/auth.py:28 bot/keyboards/reply/__init__.py:9
-msgid "cancel_btn"
-msgstr "❌ Отмена"
+#: bot/handlers/callback/stubs.py:15
+msgid "stub.in_development"
+msgstr "🚧 В разработке"
 
-#: bot/handlers/message/auth.py:38
-msgid "cancelled"
-msgstr "❌ Действие отменено."
+#: bot/handlers/callback/sync.py:29 bot/handlers/message/sync.py:67
+#: bot/tasks/sync.py:43
+msgid "sync.auth_required"
+msgstr "🔒 Войдите в edu-tpi: /start"
 
-#: bot/handlers/message/auth.py:61
+#: bot/handlers/callback/sync.py:35 bot/handlers/message/sync.py:72
+msgid "sync.started"
+msgstr "⏳ Синхронизация запущена…"
+
+#: bot/handlers/callback/sync.py:35 bot/handlers/message/sync.py:72
+#: bot/tasks/sync.py:42
+msgid "sync.already_running"
+msgstr "⏳ Синхронизация уже идёт…"
+
+#: bot/handlers/message/auth.py:83
+msgid "auth.auth_started"
+msgstr "⏳ Авторизация запущена..."
+
+#: bot/handlers/message/auth.py:97
+msgid "auth.unavailable"
+msgstr "⚠️ Сервис журнала недоступен."
+
+#: bot/handlers/message/auth.py:109
+msgid "auth.failed"
+msgstr "❌ Логин или пароль неверны. Попробуйте снова:"
+
+#: bot/handlers/message/auth.py:123
+msgid "auth.success"
+msgstr "✅ Авторизация успешна!"
+
+#: bot/handlers/message/auth.py:143
+msgid "logout.done"
+msgstr "✅ Вы вышли из edu-tpi."
+
+#: bot/handlers/message/auth.py:180
 msgid "auth.enter_login_invalid"
 msgstr "❌ Неверный формат email. Попробуйте снова:"
 
-#: bot/handlers/message/auth.py:73
+#: bot/handlers/message/auth.py:192
 msgid "auth.enter_pass_with_login"
 msgstr ""
 "📧 Логин: {login}\n"
 "🔑 Введите edu пароль:"
 
-#: bot/handlers/message/auth.py:99
+#: bot/handlers/message/auth.py:219
 msgid "auth.enter_pass_invalid"
 msgstr "❌ Пароль не может быть пустым. Попробуйте снова:"
-
-#: bot/handlers/message/auth.py:112
-msgid "auth.auth_started"
-msgstr "⏳ Авторизация запущена..."
-
-#: bot/handlers/message/auth.py:129
-msgid "auth.failed"
-msgstr "❌ Логин или пароль неверны. Попробуйте снова:"
-
-#: bot/handlers/message/auth.py:132
-msgid "auth.unavailable"
-msgstr "⚠️ Сервис журнала недоступен."
-
-#: bot/keyboards/inline/auth.py:30
-msgid "auth.retry_btn"
-msgstr "🔄 Ещё раз"
-
-#: bot/keyboards/inline/auth.py:31
-msgid "auth.change_data_btn"
-msgstr "✏️ Сменить данные"
-
-#: bot/handlers/message/auth.py:140
-msgid "auth.success"
-msgstr "✅ Авторизация успешна!"
 
 #: bot/handlers/message/export_users.py:29
 msgid "user counter"
 msgstr "кол-во пользователей: <b>{count}</b>"
+
+#: bot/handlers/message/grades.py:38
+msgid "grades.no_journals"
+msgstr "Журналов пока нет. Нажмите «Обновить»."
+
+#: bot/handlers/message/grades.py:41
+msgid "grades.title"
+msgstr "📊 Оценки"
+
+#: bot/handlers/message/grades.py:42
+msgid "grades.choose_journal"
+msgstr "Выберите журнал:"
+
+#: bot/handlers/message/grades.py:64
+msgid "grades.empty_journal"
+msgstr "Оценок пока нет. Нажмите «Обновить»."
+
+#: bot/handlers/message/grades.py:65
+msgid "sync.hint_update"
+msgstr "Нажмите «Обновить», чтобы загрузить оценки."
+
+#: bot/handlers/message/grades.py:89
+msgid "grades.login_required"
+msgstr "🔒 Войдите в edu-tpi, чтобы смотреть оценки: /start"
 
 #: bot/handlers/message/info.py:11
 msgid "about"
@@ -97,7 +134,7 @@ msgstr "Привет еще раз! 🌟"
 msgid "welcome_back_4"
 msgstr "С возвращением! 😄"
 
-#: bot/handlers/message/start.py:34 bot/utils/main_menu.py:15
+#: bot/handlers/message/start.py:34 bot/utils/main_menu.py:12
 msgid "first message"
 msgstr ""
 "👋 Привет! Я бот для электронного журнала edu-tpi.\n"
@@ -112,6 +149,18 @@ msgstr ""
 msgid "support text"
 msgstr "🤝 Поддержка"
 
+#: bot/keyboards/inline/auth.py:13 bot/keyboards/inline/auth.py:27
+msgid "cancel_btn"
+msgstr "❌ Отмена"
+
+#: bot/keyboards/inline/auth.py:25
+msgid "auth.retry_btn"
+msgstr "🔄 Ещё раз"
+
+#: bot/keyboards/inline/auth.py:26
+msgid "auth.change_data_btn"
+msgstr "✏️ Сменить данные"
+
 #: bot/keyboards/inline/contacts.py:11 bot/keyboards/inline/contacts.py:22
 msgid "support button"
 msgstr "Написать"
@@ -119,6 +168,20 @@ msgstr "Написать"
 #: bot/keyboards/inline/contacts.py:23
 msgid "back button"
 msgstr "🔙 Назад"
+
+#: bot/keyboards/inline/grades.py:32 bot/keyboards/inline/grades.py:42
+#: bot/keyboards/inline/grades.py:51
+msgid "grades.update_btn"
+msgstr "🔄 Обновить"
+
+#: bot/keyboards/inline/grades.py:33 bot/keyboards/inline/grades.py:43
+#: bot/keyboards/inline/grades.py:53
+msgid "grades.back_btn"
+msgstr "◀️ Назад"
+
+#: bot/keyboards/inline/grades.py:41 bot/keyboards/inline/grades.py:52
+msgid "grades.to_list_btn"
+msgstr "◀️ К списку"
 
 #: bot/keyboards/inline/menu.py:16
 msgid "menu.grades_btn"
@@ -152,19 +215,79 @@ msgstr "🔄 Обновить"
 msgid "menu.auth_btn"
 msgstr "🔑 Войти"
 
-#: bot/utils/main_menu.py:14
+#: bot/tasks/sync.py:44
+msgid "sync.parse_failed"
+msgstr "⚠️ Не удалось разобрать журнал. Попробуйте позже; если повторяется — напишите в поддержку."
+
+#: bot/tasks/sync.py:45
+msgid "sync.unavailable"
+msgstr "⚠️ Журнал недоступен, попробуйте позже."
+
+#: bot/utils/formatters.py:48
 msgid "last_grade"
 msgstr ""
 "Последняя полученая оценка:\n"
 "{} по предмету \"{}\" за {}"
 
-#: bot/utils/main_menu.py:14
+#: bot/utils/formatters.py:66
+msgid "grades.col_subject"
+msgstr "Предмет"
+
+#: bot/utils/formatters.py:67
+msgid "grades.col_date"
+msgstr "Дата"
+
+#: bot/utils/formatters.py:68
+msgid "grades.col_pair"
+msgstr "Пара"
+
+#: bot/utils/formatters.py:69
+msgid "grades.col_grade"
+msgstr "Оценка"
+
+#: bot/utils/formatters.py:70
+msgid "grades.col_visit"
+msgstr "Посещение"
+
+#: bot/utils/formatters.py:112
+msgid "grades.legend"
+msgstr "Н — отсутствовал · У — уважительная причина · Б — болезнь · О — опоздал"
+
+#: bot/utils/formatters.py:118
+msgid "grades.average_none"
+msgstr "Средний балл: —"
+
+#: bot/utils/formatters.py:119
+msgid "grades.average"
+msgstr "Средний балл: {0}"
+
+#: bot/utils/formatters.py:128
+msgid "grades.journal_line"
+msgstr "• {0} — средний {1} ({2} оценок)"
+
+#: bot/utils/formatters.py:136
+msgid "sync.summary"
+msgstr "📊 Синхронизация завершена: новых оценок — {new}, обновлено — {updated}."
+
+#: bot/utils/formatters.py:138
+msgid "sync.no_changes"
+msgstr "✅ Изменений нет."
+
+#: bot/utils/formatters.py:144
+msgid "sync.partial_errors"
+msgstr "⚠️ Не удалось обновить журналы: {count}."
+
+#: bot/utils/formatters.py:146
+msgid "sync.journal_error"
+msgstr "• {name}"
+
+#: bot/utils/formatters.py:148
+msgid "sync.more_errors"
+msgstr "…и ещё {count}."
+
+#: bot/utils/main_menu.py:16
 msgid "last_grade.none"
 msgstr "Оценки не найдены"
-
-#: bot/handlers/callback/stubs.py:14
-msgid "stub.in_development"
-msgstr "🚧 В разработке"
 
 #~ msgid "bot started"
 #~ msgstr "Бот запущен!"

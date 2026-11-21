@@ -1,0 +1,29 @@
+{
+  "data": {
+    "returnList": [
+      {
+        "id": 27919,
+        "groupName": "584 ис-3",
+        "dis": "Программирование",
+        "type": "Лек",
+        "year": "2025-2026",
+        "prepodName": "Преподавателев П.П.",
+        "dateCount": 16,
+        "maxDateCount": 26.0,
+        "passes": 0
+      },
+      {
+        "id": 27920,
+        "groupName": "584 ис-3",
+        "dis": "Базы данных",
+        "type": "Лаб",
+        "year": "2025-2026",
+        "prepodName": "Преподавателев П.П.",
+        "dateCount": 8,
+        "maxDateCount": 16.0,
+        "passes": 1
+      }
+    ],
+    "fillingProcent": 67
+  }
+}
