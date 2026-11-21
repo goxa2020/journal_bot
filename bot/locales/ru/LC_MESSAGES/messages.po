@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-21 22:37+0300\n"
+"POT-Creation-Date: 2026-11-21 22:53+0300\n"
 "PO-Revision-Date: 2024-01-15 12:59+0400\n"
 "Last-Translator: \n"
 "Language: ru\n"
@@ -223,73 +223,61 @@ msgstr "⚠️ Не удалось разобрать журнал. Попроб
 msgid "sync.unavailable"
 msgstr "⚠️ Журнал недоступен, попробуйте позже."
 
-#: bot/utils/formatters.py:50
+#: bot/utils/formatters.py:51
 msgid "last_grade"
 msgstr ""
 "Последняя полученая оценка:\n"
 "{} по предмету \"{}\" за {}"
 
-#: bot/utils/formatters.py:71
+#: bot/utils/formatters.py:72
 msgid "grades.type_lecture"
 msgstr "Л"
 
-#: bot/utils/formatters.py:73
+#: bot/utils/formatters.py:74
 msgid "grades.type_practice"
 msgstr "П"
 
-#: bot/utils/formatters.py:75
+#: bot/utils/formatters.py:76
 msgid "grades.type_lab"
 msgstr "Лаб"
 
-#: bot/utils/formatters.py:88
+#: bot/utils/formatters.py:89
 msgid "grades.col_date"
 msgstr "Дата"
 
-#: bot/utils/formatters.py:89
-msgid "grades.col_kind"
-msgstr "Тип"
-
 #: bot/utils/formatters.py:90
 msgid "grades.col_value"
-msgstr "Значение"
+msgstr "Оценка/посещение"
 
-#: bot/utils/formatters.py:101
-msgid "grades.kind_mark"
-msgstr "Оценка"
-
-#: bot/utils/formatters.py:103
-msgid "grades.kind_pass"
-msgstr "Посещение"
-
-#: bot/utils/formatters.py:130
+#: bot/utils/formatters.py:122
 msgid "grades.average_none"
 msgstr "Средний балл: —"
 
-#: bot/utils/formatters.py:131
+#: bot/utils/formatters.py:123
 msgid "grades.average"
 msgstr "Средний балл: {0}"
 
-#: bot/utils/formatters.py:140 bot/utils/formatters.py:143
+#: bot/utils/formatters.py:132 bot/utils/formatters.py:138
 msgid "grades.journal_line"
 msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:152
+#: bot/utils/formatters.py:147
 msgid "sync.summary"
 msgstr "📊 Синхронизация завершена: новых оценок — {new}, обновлено — {updated}."
 
-#: bot/utils/formatters.py:154
+#: bot/utils/formatters.py:149
 msgid "sync.no_changes"
 msgstr "✅ Изменений нет."
 
-#: bot/utils/formatters.py:160
+#: bot/utils/formatters.py:155
 msgid "sync.partial_errors"
 msgstr "⚠️ Не удалось обновить журналы: {count}."
 
-#: bot/utils/formatters.py:161
+#: bot/utils/formatters.py:156
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:163
+#: bot/utils/formatters.py:158
 msgid "sync.more_errors"
 msgstr "…и ещё {count}."
 
@@ -314,3 +302,12 @@ msgstr "Оценки не найдены"
 
 #~ msgid "grades.legend"
 #~ msgstr "Н — отсутствовал · У — уважительная причина · Б — болезнь · О — опоздал"
+
+#~ msgid "grades.col_kind"
+#~ msgstr "Тип"
+
+#~ msgid "grades.kind_mark"
+#~ msgstr "Оценка"
+
+#~ msgid "grades.kind_pass"
+#~ msgstr "Посещение"

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-21 22:37+0300\n"
+"POT-Creation-Date: 2026-11-21 22:53+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -219,73 +219,61 @@ msgstr "⚠️ Could not parse the journal. Try again later; contact support if 
 msgid "sync.unavailable"
 msgstr "⚠️ The journal is unavailable, try again later."
 
-#: bot/utils/formatters.py:50
+#: bot/utils/formatters.py:51
 msgid "last_grade"
 msgstr ""
 "Last received grade:\n"
 "{} in subject \"{}\" for {}"
 
-#: bot/utils/formatters.py:71
+#: bot/utils/formatters.py:72
 msgid "grades.type_lecture"
 msgstr "L"
 
-#: bot/utils/formatters.py:73
+#: bot/utils/formatters.py:74
 msgid "grades.type_practice"
 msgstr "P"
 
-#: bot/utils/formatters.py:75
+#: bot/utils/formatters.py:76
 msgid "grades.type_lab"
 msgstr "Lab"
 
-#: bot/utils/formatters.py:88
+#: bot/utils/formatters.py:89
 msgid "grades.col_date"
 msgstr "Date"
 
-#: bot/utils/formatters.py:89
-msgid "grades.col_kind"
-msgstr "Type"
-
 #: bot/utils/formatters.py:90
 msgid "grades.col_value"
-msgstr "Value"
+msgstr "Grade/attendance"
 
-#: bot/utils/formatters.py:101
-msgid "grades.kind_mark"
-msgstr "Grade"
-
-#: bot/utils/formatters.py:103
-msgid "grades.kind_pass"
-msgstr "Attendance"
-
-#: bot/utils/formatters.py:130
+#: bot/utils/formatters.py:122
 msgid "grades.average_none"
 msgstr "Average: —"
 
-#: bot/utils/formatters.py:131
+#: bot/utils/formatters.py:123
 msgid "grades.average"
 msgstr "Average: {0}"
 
-#: bot/utils/formatters.py:140 bot/utils/formatters.py:143
+#: bot/utils/formatters.py:132 bot/utils/formatters.py:138
 msgid "grades.journal_line"
 msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:152
+#: bot/utils/formatters.py:147
 msgid "sync.summary"
 msgstr "📊 Sync complete: {new} new, {updated} updated."
 
-#: bot/utils/formatters.py:154
+#: bot/utils/formatters.py:149
 msgid "sync.no_changes"
 msgstr "✅ No changes."
 
-#: bot/utils/formatters.py:160
+#: bot/utils/formatters.py:155
 msgid "sync.partial_errors"
 msgstr "⚠️ Could not update journals: {count}."
 
-#: bot/utils/formatters.py:161
+#: bot/utils/formatters.py:156
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:163
+#: bot/utils/formatters.py:158
 msgid "sync.more_errors"
 msgstr "…and {count} more."
 
@@ -304,3 +292,12 @@ msgstr "No grades found"
 
 #~ msgid "grades.legend"
 #~ msgstr "Н — absent · У — valid reason · Б — sick · О — late"
+
+#~ msgid "grades.col_kind"
+#~ msgstr "Type"
+
+#~ msgid "grades.kind_mark"
+#~ msgstr "Grade"
+
+#~ msgid "grades.kind_pass"
+#~ msgstr "Attendance"

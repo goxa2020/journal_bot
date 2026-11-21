@@ -21,11 +21,12 @@ if TYPE_CHECKING:
 
 DATE_FORMAT = "%d.%m.%Y"
 
-#: Ширина строк таблицы (задача 2.9). Telegram считает `<pre>` посимвольно.
+#: Максимальная ширина строки списка и таблицы (Telegram считает `<pre>` посимвольно).
 TABLE_WIDTH = 50
 DATE_WIDTH = 12
-KIND_WIDTH = 14
 VALUE_WIDTH = 20
+#: Таблица конкретного журнала: дата + один столбец «оценка/посещение».
+GRADES_TABLE_WIDTH = DATE_WIDTH + 2 + VALUE_WIDTH
 EMPTY_CELL = "—"
 ELLIPSIS = "…"
 
@@ -86,36 +87,27 @@ def _table_header() -> str:
     return "  ".join(
         (
             _fit(_("grades.col_date"), DATE_WIDTH),
-            _fit(_("grades.col_kind"), KIND_WIDTH),
             _fit(_("grades.col_value"), VALUE_WIDTH),
         ),
     )
 
 
-def _grade_cells(grade: object) -> tuple[str, str]:
-    """(вид, значение): оценка и посещаемость не могут быть одновременно."""
+def _grade_value(grade: object) -> str:
+    """Значение: числовая оценка или буквенный пропуск в одном столбце."""
     value = str(getattr(grade, "value", "") or "")
-    is_mark = bool(getattr(grade, "is_mark", False))
-    is_pass = bool(getattr(grade, "is_pass", False))
-    if is_mark:
-        return _("grades.kind_mark"), value or EMPTY_CELL
-    if is_pass:
-        return _("grades.kind_pass"), value or EMPTY_CELL
-    return EMPTY_CELL, value or EMPTY_CELL
+    return value or EMPTY_CELL
 
 
 def format_grades_table(title: str, grades: Sequence[object]) -> str:
-    """Таблица одного журнала: дата, вид занятия и значение, ширина — 50 символов."""
-    rows = [_table_header(), "-" * TABLE_WIDTH]
+    """Таблица одного журнала: дата и одно значение, не шире 50 символов."""
+    rows = [_table_header(), "-" * GRADES_TABLE_WIDTH]
     for grade in grades:
-        kind, value = _grade_cells(grade)
         grade_date = getattr(grade, "date", None)
         rows.append(
             "  ".join(
                 (
                     _fit(format_date(grade_date) if grade_date else EMPTY_CELL, DATE_WIDTH),
-                    _fit(kind, KIND_WIDTH),
-                    _fit(value, VALUE_WIDTH),
+                    _fit(_grade_value(grade), VALUE_WIDTH),
                 ),
             ),
         )

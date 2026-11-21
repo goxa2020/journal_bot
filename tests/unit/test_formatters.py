@@ -9,6 +9,7 @@ from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.services.grade_sync import JournalSyncResult, SyncSummary
 from bot.services.grades import GradesService, JournalSummary
 from bot.utils.formatters import (
+    GRADES_TABLE_WIDTH,
     TABLE_WIDTH,
     format_average,
     format_date,
@@ -91,7 +92,7 @@ def test_long_title_does_not_break_table(ru_locale) -> None:
     text = format_grades_table(title, [_grade(hour=1, value="4", is_mark=True)])
 
     lines = _table_lines(text)
-    assert all(len(line) == TABLE_WIDTH for line in lines)
+    assert all(len(line) == GRADES_TABLE_WIDTH for line in lines)
     assert "<b>" in text
 
 
@@ -99,7 +100,7 @@ def test_empty_values_do_not_break_columns(ru_locale) -> None:
     text = format_grades_table("Физика", [_grade(hour=2, value="", is_mark=False)])
     lines = _table_lines(text)
 
-    assert all(len(line) == TABLE_WIDTH for line in lines)
+    assert all(len(line) == GRADES_TABLE_WIDTH for line in lines)
     assert "—" in lines[2]
 
 
@@ -114,12 +115,11 @@ def test_table_has_one_value_column_without_subject_and_pair(ru_locale) -> None:
     lines = _table_lines(text)
     body = "\n".join(lines)
 
-    assert "Оценка" in lines[2]
     assert "4" in lines[2]
-    assert "Посещение" in lines[3]
     assert "Н" in lines[3]
     assert "Физика" not in body
     assert "Пара" not in body
+    assert all(len(line) == GRADES_TABLE_WIDTH for line in lines)
 
 
 def test_journal_display_name_adds_type_suffix(ru_locale) -> None:
