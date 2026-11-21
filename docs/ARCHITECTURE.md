@@ -244,8 +244,9 @@ bot/
 | `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя |
 | `sync:queued:{user_id}` | строка | 30 с | защита от повторной постановки задачи при двойном нажатии «Обновить» |
 | `ratelimit:{user_id}` | счётчик | 60 с | лимит апдейтов от пользователя |
-| `notifications:night:{user_id}` | list | до 09:00 | накопленные ночные оценки |
+| `notifications:night:{user_id}` | list | до утра + 2 ч | накопленные ночные оценки (JSON-записи) |
 | `notify:sent:{user_id}:{lesson_key}` | строка | 7 дней | защита от повторного уведомления |
+| `notify:night:scheduled:{user_id}` | строка | до утра + 2 ч | один `send_night_batch` на пользователя |
 | `watch_mode:users` | set | чистится задачей | пользователи в режиме ожидания |
 | `api:ratelimit:edu` | счётчик | 1 с | глобальный лимит запросов к edu-tpi |
 
@@ -352,8 +353,8 @@ class EduTpiClient:
 | `sync_user_after_login` | `user_id` | Первая синхронизация после входа, без сообщения об успехе | 3 |
 | `sync_watch_mode_users` | — | Все пользователи с `watch_mode_expires_at > now()` | — |
 | `sync_all_users` | — | Групповая синхронизация по расписанию | — |
-| `send_grade_notification` | `user_id`, `lesson_keys` | Немедленное уведомление (день) | 2 |
-| `send_night_batch` | `user_id` | Отправка накопленного ночного списка (`eta` = утро) | 2 |
+| `send_grade_notification` | `user_id`, `notices` (JSON-записи) | Уведомление о новых оценках: днём сразу, ночью в очередь | 3 |
+| `send_night_batch` | `user_id` | Отправка накопленного ночного списка (`eta` = утро) | 3 |
 | `cleanup_expired_watch_mode` | — | Сброс истёкшего режима ожидания | — |
 | `cleanup_old_logs` | `days=30` | Чистка `sync_logs` | — |
 | `collect_metrics` | — | Обновление gauge-метрик | — |
@@ -430,8 +431,15 @@ async with Bot(settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=HTML)
   (после миграции §9).
 - Уведомления дедуплицируются `notify:sent:{user_id}:{lesson_key}` (SET NX EX 7 дней);
   маркер ставится до отправки и удаляется, если отправка не удалась.
+- Ночная очередь читается и очищается одной транзакцией: повторный запуск
+  `send_night_batch` (acks_late) не отправляет тот же список дважды. Если отправка не
+  удалась, список возвращается в Redis, а задача ретраится.
+- `notify:night:scheduled:{user_id}` (SET NX) не даёт поставить вторую утреннюю задачу
+  при повторной синхронизации; ключ снимается после успешной отправки.
 - Ошибки делятся на `RetryableError` (сеть, 5xx, 429) и `PermanentError` (неверные данные,
   схема): первые — `self.retry`, вторые — лог, `sync_logs.status=failed`, уведомление админу.
+  Блокировка бота (`TelegramForbiddenError`) — не ошибка: `notification_enabled=False`,
+  маркеры снимаются, очередь и другие пользователи не страдают.
 
 ---
 
@@ -506,17 +514,29 @@ beat 6ч → sync_all_users
 ### 7.4 Уведомления
 
 ```
-новая оценка → NotificationService.notify(user_id, grades)
-   notification_enabled? нет → выходим
-   сейчас 22:00–08:00 и morning_notification_enabled?
-       да  → RPUSH notifications:night:{user_id}, EXPIRE до 09:00
-              send_night_batch.apply_async(eta=ближайшее morning_notification_time)
-       нет → send_grade_notification.delay(user_id, lesson_keys)
-   TelegramForbidden → notification_enabled=False, лог
+sync_user_manual: новые уроки (NewGradeNotice) → notify_new_grades(user_id, notices, manual=True)
+sync_user_after_login: уведомлений нет (первичный импорт)
+
+notify_new_grades → NotificationService.decide(notices, force_immediate=manual)
+   notification_enabled? нет → метрика skipped, выходим
+   маркеры notify:sent:* уже стоят? → метрика skipped, выходим
+   ночь 22:00–07:59 МСК и morning_notification_enabled (и это не ручная синхронизация)?
+       да  → mark → RPUSH notifications:night:{user_id}, EXPIRE до утра + 2 ч
+              notify:night:scheduled:{user_id} NX → send_night_batch.apply_async(eta=утро)
+       нет → mark → send_telegram_message (одно сообщение на всю пачку)
+   TelegramForbidden → notification_enabled=False, маркеры снять, метрика blocked
+   TelegramRetryAfter → sleep(retry_after ≤ 60 с), один повтор; снова 429 → RetryableError
+   прочее → маркеры снять, метрика failed, RetryableError (задача повторится)
+
+send_night_batch: pop_night() (LRANGE+DEL) → одно сообщение списком → clear schedule key
+   ошибка отправки → список вернуть в Redis и RetryableError (повтор не потеряет данные)
 ```
 
-Утренняя задача собирает список из Redis, склеивает в одно сообщение (дата, предмет, оценка),
-чистит ключ. Одна оценка — одно сообщение, много — список; никаких «пинг-понгов» по одной.
+Ручная синхронизация ночью отвечает сразу: пользователь ждёт ответ на своё действие, и
+ночная политика к ней не применяется. Одна оценка — одно сообщение, много — список
+(дата, предмет с пометкой «Л»/«П», значение); «пинг-понгов» по одной оценке нет.
+Метрики: `notifications_total{kind,status}` и `sync_new_grades{type}` в
+[bot/core/metrics.py](../bot/core/metrics.py) (процесс воркера, HTTP-экспорт — фаза 8).
 
 ### 7.5 Режим ожидания (после MVP)
 
@@ -594,10 +614,21 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 
 ## 11. Наблюдаемость
 
-**Метрики.** Сейчас в [bot/middlewares/prometheus.py](../bot/middlewares/prometheus.py) есть
-только HTTP-метрики aiohttp-сервера webhook (`tgbot_requests`, `tgbot_responses`,
-`tgbot_request_duration`, `tgbot_requests_in_progress`, `tgbot_exceptions`) и эндпоинт `/metrics`.
-Бизнес-метрик нет — они заводятся в фазах 2–3.
+**Метрики.** HTTP-метрики aiohttp-сервера webhook (`tgbot_requests`, `tgbot_responses`,
+`tgbot_request_duration`, `tgbot_requests_in_progress`, `tgbot_exceptions`) и эндпоинт
+`/metrics` живут в [bot/middlewares/prometheus.py](../bot/middlewares/prometheus.py).
+Метрики задач — в [bot/tasks/base.py](../bot/tasks/base.py), бизнес-метрики — в
+[bot/core/metrics.py](../bot/core/metrics.py):
+
+| Метрика | Тип | Метки | Где считается |
+|---|---|---|---|
+| `notifications_total` | Counter | `kind` (immediate/night), `status` (sent/skipped/failed/blocked) | `bot/tasks/notify.py` |
+| `sync_new_grades` | Counter | `type` (manual/auto) | `bot/tasks/sync.py` |
+| `celery_tasks`, `celery_task_failures`, `celery_task_duration_seconds` | Counter/Histogram | `task`, `status` | `bot/tasks/base.py` |
+
+Уведомления и синхронизации считаются в процессе воркера: HTTP-экспорт (`/metrics` бота их
+не видит) появится вместе с celery-exporter в фазе 8. `Counter` с именем `sync_new_grades`
+экспонируется как `sync_new_grades_total` — это поведение prometheus-client.
 
 Целевой набор:
 
@@ -680,6 +711,8 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 3. **Фаза 2 — сделано.** Слияние `api_client` и `journal_parser` в `integrations/edu_tpi.py`;
    кеш журналов и подгруппы; `TokenService`; `GradeSyncService`; миграция `grades`;
    `/sync`, `/grades`, `/logout`.
-4. **Фаза 3.** `NotificationService` и политика «ночь → утро».
+4. **Фаза 3 — сделано.** `NotificationService` (политика «день/ночь», дедупликация),
+   задачи `send_grade_notification`/`send_night_batch`, ночная очередь в Redis, экран
+   `/settings`, метрики `notifications_total`/`sync_new_grades` и worker-safe аналитика.
 
 После этого код соответствует этой схеме, и документ можно перевести в статус «реализовано».

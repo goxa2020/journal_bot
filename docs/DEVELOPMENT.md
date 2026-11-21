@@ -289,13 +289,15 @@ tests/
 
 На фазе 2 добавлены тесты клиента edu-tpi, кеша/подгрупп, токена и переавторизации,
 дифа оценок, задач `sync_user_*`, `/sync`, `/grades`, `/logout` и форматтера таблицы.
-Всего 153 теста.
+На фазе 3 — политика уведомлений (`tests/unit/test_notifications.py`), задачи
+`tests/unit/test_notify_tasks.py` (eager-режим, ночная очередь, ошибки Telegram) и экран
+`tests/unit/test_settings.py`. Всего 218 тестов.
 
 ```bash
 just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
 uv run pytest -q                    # всё
 uv run pytest tests/unit -q         # быстро
-uv run pytest -k token_ttl -vv      # один срез
+uv run pytest -k notification -vv   # один срез
 ```
 
 Правила:
@@ -338,6 +340,8 @@ uv run pytest -k token_ttl -vv      # один срез
 | `invalid role "tgbot"` / пустая схема при локальном запуске | подключились к локальному Postgres, а не к контейнеру | `DB_HOST=127.0.0.1`, `DB_PORT=6432` (pgbouncer) или `6433` (postgres) в `.env.local` |
 | `relation "users" does not exist` | в томе пустая БД (новый том после пересоздания контейнера) | `docker compose run --rm migrator` |
 | `409 Conflict` в логах Telegram | два поллера с одним токеном (локальный и контейнерный) | остановить один: `docker compose stop bot` |
+| Уведомления не приходят, в логах `notification blocked` | пользователь заблокировал бота: `notification_enabled=False` | разблокировать бота и включить уведомления в `/settings` |
+| Ночью сообщение пришло сразу | выключено «копить ночью» или это ручная синхронизация | `/settings` → «Копить ночью: вкл»; ручная синхронизация отвечает сразу всегда |
 | `Error 11001 connecting to redis:6379` у воркера | воркер запущен локально, но читает `.env` с docker-хостами | локально — `just dev-worker` (`ENV_FILE=.env.local`); вручную: `ENV_FILE=.env.local uv run celery -A bot.celery_app worker ...` |
 | `/healthz` не отвечает, `curl` висит | бот поднят в webhook-режиме или порт занят | в polling `/healthz` поднимает `bot/core/health.py` на `WEBHOOK_HOST:WEBHOOK_PORT`; проверить `docker compose port bot ${WEBHOOK_PORT}` и логи `health server` |
 | Порт занят | локальный сервис на 5433/6379/8080/3000 | изменить в `.env` или остановить локальный сервис |
@@ -377,6 +381,31 @@ docker compose exec worker python -c \
   "from bot.tasks.sync import sync_user_manual; sync_user_manual.delay(USER_ID)"
 docker compose logs -f worker        # сводка и sync_logs видны здесь
 ```
+
+Уведомления проверяются отдельными задачами (сообщение уходит в реальный Telegram):
+
+```bash
+# немедленное уведомление о «новой» оценке: дата, предмет, значение
+docker compose exec worker python -c '
+from bot.services.grade_sync import NewGradeNotice
+from bot.tasks.notify import send_grade_notification
+import datetime as dt
+notice = NewGradeNotice(journal_id=0, journal_name="Проверка", journal_type="Лек",
+                        date=dt.date.today(), hour_number=1, value="5",
+                        number_value=5, is_mark=True)
+print(send_grade_notification.delay(USER_ID, [notice.to_dict()]).get(timeout=60))
+# повторный вызов вернёт {"kind": "none", "status": "skipped"}: маркер notify:sent уже стоит
+'
+
+# утренняя сводка из ночной очереди (если очередь пуста — skipped)
+docker compose exec worker python -c \
+  "from bot.tasks.notify import send_night_batch; print(send_night_batch.delay(USER_ID).get(timeout=60))"
+```
+
+Ночная политика зависит от времени Europe/Moscow: днём `send_grade_notification` отправит
+сообщение сразу, ночью (22:00–07:59) — положит в `notifications:night:{user_id}` и поставит
+`send_night_batch` на утро. Проверить условие без ожидания ночи можно подменой
+`bot.services.notifications.now` в тестах (`tests/unit/test_notifications.py`).
 
 Smoke-задача `bot.tasks.service.ping` не пишет в БД и не ходит в Telegram: если она не отвечает
 `pong`, проблема в брокере или воркере, а не в задаче.
@@ -423,7 +452,7 @@ journal_bot/
 ├── migrations/          Alembic
 ├── configs/             prometheus, grafana
 ├── scripts/             бэкапы, вспомогательные скрипты
-├── tests/               появится в фазе 0
+├── tests/               unit и integration (pytest, fakeredis, стаб edu-tpi)
 ├── docker-compose.yml   окружение
 ├── justfile / Makefile  команды
 └── pyproject.toml       зависимости, ruff, mypy

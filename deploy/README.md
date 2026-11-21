@@ -51,6 +51,23 @@ Dockerfile  .dockerignore  docker-compose.yml  docker-compose.prod.yml  deploy/x
 `USE_WEBHOOK=False`, `CELERY_WORKER_CONCURRENCY=2` (четыре prefork-процесса на четырёх старых
 ядрах дерутся за CPU) и `TELEGRAM_PROXY`.
 
+## Если сборка падает на `ghcr.io`
+
+Демон тянет образы через `dns` из `/etc/docker/daemon.json` (1.1.1.1/8.8.8.8), а BuildKit
+читает `/etc/resolv.conf`, куда dhcpcd пишет роутер `192.168.1.1`. Роутер иногда отвечает
+`no such host` на `ghcr.io`, хотя `getent hosts ghcr.io` работает. Проверенный обход:
+
+```bash
+# на сервере: скачать базовый образ демоном (он резолвит через 1.1.1.1)
+sudo docker pull ghcr.io/astral-sh/uv:0.5-python3.13-alpine
+# затем с машины разработчика: сборка пойдёт из локального стора без сети
+pwsh deploy/deploy.ps1
+```
+
+Альтернатива — везти готовый образ (`docker save` → gzip → `scp` → `docker load` →
+`up -d --no-build`; `deploy.ps1 -NoBuild` распаковывает код и перезапускает стек без сборки).
+Полный фикс — прописать в `/etc/resolv.conf` публичный DNS и не зависеть от роутера.
+
 ## Telegram: заблокирован провайдером
 
 Проверено с сервера: TCP:443 до всех IP Telegram и `web.telegram.org` не проходят, при этом
