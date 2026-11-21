@@ -434,3 +434,46 @@ async def test_no_progress_marks_remaining_failed(
     assert summary.failed == 2
     assert summary.success == 0
     assert "unprocessed" in summary.errors
+
+
+async def test_member_is_matched_by_full_name_when_edu_id_differs(
+    redis: fakeredis.aioredis.FakeRedis,
+    sync_env: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`userID` из tokenauth может не совпадать с id строки journalData.
+
+    На проде `users.edu_user_id` = -22069, а в журнале студент идёт под другим id:
+    `GradeSyncService` находит его по ФИО, и групповая синхронизация обязана делать так же,
+    иначе проход не уменьшает `unprocessed` и группа навсегда остаётся failed.
+    """
+    member = UserSyncInfo(
+        id=1,
+        is_authenticated=True,
+        edu_user_id=-22069,
+        group_id=GROUP_ID,
+        group_name="584 ис-3",
+        full_name="Студентов С.С.",
+        language_code="ru",
+    )
+    _patch_candidates(monkeypatch, [member])
+    token = await _seed_token(redis, member)
+
+    payload = JournalPayload(
+        journal_id=JOURNAL_ID,
+        name="Журнал 10",
+        type="Лек",
+        is_subgroup=False,
+        students=(StudentGrades(student_id=5001, lessons=(_lesson(),), fio="Студентов С.С."),),
+    )
+    client = FakeClient([JournalBrief(id=JOURNAL_ID, name="Журнал 10")], {(token, JOURNAL_ID): payload})
+    notifier = Recorder()
+
+    summary = await _service(redis, client, [member], notifier=notifier).sync_all()
+
+    assert summary.status == "success"
+    assert summary.success == 1
+    assert summary.failed == 0
+    assert summary.new_grades == 1
+    assert (1, JOURNAL_ID) in {(user_id, journal_id) for user_id, journal_id, *_ in sync_env["store"]}
+    assert [user_id for user_id, _ in notifier.calls] == [1]

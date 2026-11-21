@@ -347,15 +347,38 @@ class GroupSyncService:
     ) -> None:
         """Применить журнал ко всем участникам группы, которые в нём есть."""
         student_ids = set(payload.student_ids)
+        matched: list[UserSyncInfo] = []
 
         for member in sorted(unprocessed.values(), key=lambda item: (item.edu_user_id or 0, item.id)):
-            if member.edu_user_id not in student_ids:
+            if not self._payload_has_member(payload, member):
                 continue
+            matched.append(member)
             await self._apply_member(brief, payload, member, results)
 
         # Подгруппа обработана целиком, даже если часть студентов — не пользователи бота.
         for student_id in student_ids:
             unprocessed.pop(student_id, None)
+        # `edu_user_id` из `tokenauth` не всегда совпадает с id строки в `journalData`
+        # (на проде встречается отрицательный userID): сопоставленных по ФИО убираем явно,
+        # иначе проход не уменьшает `unprocessed` и группа уходит в failed.
+        for member in matched:
+            if member.edu_user_id is not None:
+                unprocessed.pop(member.edu_user_id, None)
+
+    @staticmethod
+    def _payload_has_member(payload: JournalPayload, member: UserSyncInfo) -> bool:
+        """Есть ли участник в журнале — по id, а при расхождении id по ФИО.
+
+        `GradeSyncService.apply_payload` ищет студента так же (`JournalPayload.find_student`):
+        id — основной ключ, ФИО — резервный, потому что `journalData.id` и `userID` из
+        `tokenauth` могут не совпадать.
+        """
+        if member.edu_user_id is not None and payload.has_student(member.edu_user_id):
+            return True
+        full_name = member.full_name
+        if not full_name:
+            return False
+        return any(full_name in (student.fio, student.full_name) for student in payload.students)
 
     async def _apply_member(
         self,
