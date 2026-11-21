@@ -225,6 +225,9 @@ class GradeSyncService:
         #: Чужой `sync:lock` не трогаем: идёт ручная синхронизация этого пользователя.
         self._user_lock = user_lock
         self._notifier = notifier
+        #: Участники группы для оппортунистической части: один запрос на синхронизацию,
+        #: а не на каждый журнал (15 журналов — 15 одинаковых SELECT без кеша).
+        self._group_members: dict[int, list[UserSyncInfo]] = {}
 
     async def sync_user(self, user_id: int) -> SyncSummary:  # noqa: C901, PLR0912, PLR0915
         """Синхронизировать все журналы пользователя и вернуть сводку."""
@@ -428,7 +431,10 @@ class GradeSyncService:
             return
 
         student_ids = set(payload.student_ids)
-        members = await load_group_members(self._session, group_id)
+        members = self._group_members.get(group_id)
+        if members is None:
+            members = await load_group_members(self._session, group_id)
+            self._group_members[group_id] = members
 
         for member in members:
             if member.id == user.id or member.edu_user_id is None or member.edu_user_id not in student_ids:

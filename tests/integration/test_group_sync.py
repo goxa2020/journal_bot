@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import fakeredis.aioredis
 import pytest
 
-from bot.core.errors import EduAuthError, EduEmptyJournalError
+from bot.core.errors import EduAuthError, EduEmptyJournalError, RetryableError
 from bot.database.models import Grade
 from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.integrations.journal_cache import JournalCache
@@ -509,3 +509,18 @@ async def test_every_journal_is_applied_even_after_member_left_unprocessed(
     assert len(sync_env["store"]) == 2
     assert sync_env["logs"][0]["message"] == "journals=2 errors=0"
     assert len(client.journal_calls) == 2
+
+
+async def test_group_without_any_journal_list_raises_retryable(
+    redis: fakeredis.aioredis.FakeRedis,
+    sync_env: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ни одной группе не дали список журналов — Celery повторит батч целиком."""
+    member = _user(1, 1001)
+    _patch_candidates(monkeypatch, [member])
+    token = await _seed_token(redis, member)
+    client = FakeClient([], {}, list_errors={token: EduAuthError("bad token")})
+
+    with pytest.raises(RetryableError):
+        await _service(redis, client, [member]).sync_all()

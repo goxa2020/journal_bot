@@ -166,6 +166,10 @@ class GroupSyncService:
                 continue
             if listed:
                 listed_groups += 1
+            else:
+                # Список журналов не дал ни один участник — это ошибки авторизации,
+                # остальные причины пробрасываются выше и ловятся как ошибка группы.
+                _add_error(summary, "auth")
 
         if by_group and listed_groups == 0:
             # Список журналов не получен ни для одной группы: edu-tpi лежит целиком.
