@@ -26,19 +26,21 @@ router = Router(name="settings")
 
 
 def render_settings(settings: NotificationSettings) -> tuple[str, InlineKeyboardMarkup]:
-    """Текст и клавиатура экрана настроек из текущих значений БД."""
-    text = "\n".join(
-        (
-            _("settings.title"),
-            "",
-            _("settings.notifications_line").format(state=state_label(settings.enabled)),
-            _("settings.night_line").format(state=state_label(settings.morning_enabled)),
-            _("settings.morning_line").format(time=format_morning_time(settings)),
-            "",
-            _("settings.hint"),
-        ),
-    )
-    return text, get_settings_keyboard(settings)
+    """Текст и клавиатура экрана настроек из текущих значений БД.
+
+    Время утренней сводки показывается только при включённом накоплении: без него
+    ночных сообщений нет, и настройка была бы недействующей.
+    """
+    lines = [
+        _("settings.title"),
+        "",
+        _("settings.notifications_line").format(state=state_label(settings.enabled)),
+        _("settings.night_line").format(state=state_label(settings.morning_enabled)),
+    ]
+    if settings.morning_enabled:
+        lines.append(_("settings.morning_line").format(time=format_morning_time(settings)))
+    lines.extend(("", _("settings.hint")))
+    return "\n".join(lines), get_settings_keyboard(settings)
 
 
 async def load_settings_screen(session: AsyncSession, user_id: int) -> tuple[str, InlineKeyboardMarkup] | None:

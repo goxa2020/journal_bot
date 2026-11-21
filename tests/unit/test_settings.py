@@ -62,6 +62,15 @@ def test_render_settings_shows_state_and_time(ru_locale) -> None:
     assert keyboard.inline_keyboard[-1][0].text == "🏠 Главное меню"
 
 
+def test_render_settings_hides_morning_time_without_night_collection(ru_locale) -> None:
+    text, keyboard = render_settings(_settings(morning_enabled=False, morning_time=dt.time(9, 0)))
+
+    assert "Время утренней сводки" not in text
+    assert "09:00" not in text
+    callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+    assert callbacks == [CALLBACK_NOTIFICATIONS, CALLBACK_NIGHT, CALLBACK_MENU]
+
+
 async def test_toggle_notifications_writes_db(monkeypatch, ru_locale) -> None:
     callback = _callback(monkeypatch)
     monkeypatch.setattr("bot.handlers.callback.settings.is_authorized", AsyncMock(return_value=True))

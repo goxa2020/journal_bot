@@ -28,7 +28,11 @@ def state_label(enabled: bool) -> str:
 
 
 def get_settings_keyboard(settings: NotificationSettings) -> InlineKeyboardMarkup:
-    """Кнопки экрана: два флага, время утра по кругу и возврат в меню."""
+    """Кнопки экрана: два флага, время утра (если накопление включено) и меню.
+
+    Время утра имеет смысл только при включённом накоплении: без него ночных
+    сообщений нет, и настройка убирается с экрана, чтобы не путать.
+    """
     builder = InlineKeyboardBuilder()
     builder.button(
         text=_("settings.notifications_btn").format(state=state_label(settings.enabled)),
@@ -38,10 +42,11 @@ def get_settings_keyboard(settings: NotificationSettings) -> InlineKeyboardMarku
         text=_("settings.night_btn").format(state=state_label(settings.morning_enabled)),
         callback_data=CALLBACK_NIGHT,
     )
-    builder.button(
-        text=_("settings.morning_btn").format(time=format_morning_time(settings)),
-        callback_data=CALLBACK_MORNING,
-    )
+    if settings.morning_enabled:
+        builder.button(
+            text=_("settings.morning_btn").format(time=format_morning_time(settings)),
+            callback_data=CALLBACK_MORNING,
+        )
     builder.button(text=_("settings.menu_btn"), callback_data=CALLBACK_MENU)
     builder.adjust(1)
     return builder.as_markup()

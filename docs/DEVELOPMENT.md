@@ -291,7 +291,7 @@ tests/
 дифа оценок, задач `sync_user_*`, `/sync`, `/grades`, `/logout` и форматтера таблицы.
 На фазе 3 — политика уведомлений (`tests/unit/test_notifications.py`), задачи
 `tests/unit/test_notify_tasks.py` (eager-режим, ночная очередь, ошибки Telegram) и экран
-`tests/unit/test_settings.py`. Всего 218 тестов.
+`tests/unit/test_settings.py`. Всего 219 тестов.
 
 ```bash
 just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
