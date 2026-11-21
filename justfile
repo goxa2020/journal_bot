@@ -11,7 +11,7 @@ help:
 
 # Install dependencies
 deps:
-    @uv sync --frozen
+    @uv sync --frozen --all-groups
 
 # Перезапуск кода в контейнере без пересборки (правки ./bot)
 watch:
