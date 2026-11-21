@@ -477,3 +477,35 @@ async def test_member_is_matched_by_full_name_when_edu_id_differs(
     assert summary.new_grades == 1
     assert (1, JOURNAL_ID) in {(user_id, journal_id) for user_id, journal_id, *_ in sync_env["store"]}
     assert [user_id for user_id, _ in notifier.calls] == [1]
+
+
+async def test_every_journal_is_applied_even_after_member_left_unprocessed(
+    redis: fakeredis.aioredis.FakeRedis,
+    sync_env: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Участник получает все журналы группы, а не только первый в проходе.
+
+    Регрессия: пока диф шёл только по `unprocessed`, после первого журнала участник
+    выходил из набора и остальные 14 журналов ему не обновлялись (на проде в sync_logs
+    было `journals=1` вместо 15).
+    """
+    member = _user(1, 1001)
+    _patch_candidates(monkeypatch, [member])
+    token = await _seed_token(redis, member)
+
+    client = FakeClient(
+        [JournalBrief(id=10, name="Журнал 10"), JournalBrief(id=11, name="Журнал 11")],
+        {
+            (token, 10): _payload(10, {1001: (_lesson(1, "4"),)}),
+            (token, 11): _payload(11, {1001: (_lesson(2, "5"),)}),
+        },
+    )
+
+    summary = await _service(redis, client, [member]).sync_all()
+
+    assert summary.success == 1
+    assert summary.new_grades == 2
+    assert len(sync_env["store"]) == 2
+    assert sync_env["logs"][0]["message"] == "journals=2 errors=0"
+    assert len(client.journal_calls) == 2

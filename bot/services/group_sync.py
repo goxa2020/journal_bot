@@ -196,7 +196,7 @@ class GroupSyncService:
         )
         return summary
 
-    async def _sync_group(  # noqa: C901 — один проход по группе читается сверху вниз
+    async def _sync_group(  # noqa: C901, PLR0915 — один проход по группе читается сверху вниз
         self,
         group_id: int,
         members: list[UserSyncInfo],
@@ -209,6 +209,10 @@ class GroupSyncService:
             if member.edu_user_id is not None
         }
         results: dict[int, MemberResult] = {}
+        #: Какие пары «участник + журнал» уже обработаны: второй проход (другая
+        #: подгруппа) не должен диффить те же журналы тем же людям повторно.
+        applied: set[tuple[int, int]] = set()
+        ordered_members = sorted(members, key=lambda item: (item.edu_user_id or 0, item.id))
 
         journals = await self._list_group_journals(group_id, members)
         if journals is None:
@@ -265,7 +269,7 @@ class GroupSyncService:
                     group_unavailable = True
                     break
 
-                await self._apply_to_members(brief, payload, unprocessed, results)
+                await self._apply_to_members(brief, payload, ordered_members, unprocessed, results, applied)
 
             if leader_failed:
                 continue
@@ -338,20 +342,31 @@ class GroupSyncService:
             ),
         )
 
-    async def _apply_to_members(
+    async def _apply_to_members(  # noqa: PLR0913, PLR0917 — контекст прохода передаётся явно
         self,
         brief: JournalBrief,
         payload: JournalPayload,
+        members: list[UserSyncInfo],
         unprocessed: dict[int, UserSyncInfo],
         results: dict[int, MemberResult],
+        applied: set[tuple[int, int]],
     ) -> None:
-        """Применить журнал ко всем участникам группы, которые в нём есть."""
+        """Применить журнал ко всем участникам группы, которые в нём есть.
+
+        `unprocessed` решает, нужен ли ещё один проход с токеном другой подгруппы, но не
+        ограничивает диф: каждый участник из `payload` получает **все** журналы группы, а
+        не только первый, после которого он вышел из `unprocessed`.
+        """
         student_ids = set(payload.student_ids)
         matched: list[UserSyncInfo] = []
 
-        for member in sorted(unprocessed.values(), key=lambda item: (item.edu_user_id or 0, item.id)):
+        for member in members:
+            key = (member.id, brief.id)
+            if key in applied:
+                continue
             if not self._payload_has_member(payload, member):
                 continue
+            applied.add(key)
             matched.append(member)
             await self._apply_member(brief, payload, member, results)
 
