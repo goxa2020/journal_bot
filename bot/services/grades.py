@@ -27,6 +27,7 @@ class JournalSummary:
     type: str
     grades_count: int
     average: float | None
+    last_grade_date: date | None = None
 
 
 class GradesService:
@@ -171,10 +172,10 @@ class GradesService:
 
     @classmethod
     async def list_journals(cls, session: AsyncSession, user_id: int) -> list[JournalSummary]:
-        """Журналы пользователя со средним баллом и числом оценок.
+        """Журналы пользователя с оценками, свежие — первыми.
 
-        Источник — `student_journal`, поэтому журнал виден и до первой оценки
-        (после входа синхронизация уже создала связи).
+        Журналы без числовых оценок (только посещаемость или пустые) не показываем:
+        пользователю нечего в них смотреть. Сортировка — по дате последней оценки.
         """
         grade_join = and_(Grade.journal_id == Journal.id, Grade.user_id == user_id)
         query = (
@@ -185,13 +186,15 @@ class GradesService:
                 Journal.type,
                 func.count(Grade.id).label("grades_count"),
                 func.avg(Grade.number_value.cast(Float)).label("average"),
+                func.max(Grade.date).label("last_grade_date"),
             )
             .select_from(Journal)
             .join(user_journal_association, user_journal_association.c.journal_id == Journal.id)
             .outerjoin(Grade, grade_join)
             .where(user_journal_association.c.user_id == user_id)
             .group_by(Journal.id, Journal.name, Journal.teacher_name, Journal.type)
-            .order_by(Journal.name)
+            .having(func.count(Grade.number_value) > 0)
+            .order_by(func.max(Grade.date).desc(), Journal.name)
         )
         result = await session.execute(query)
         return [
@@ -202,6 +205,7 @@ class GradesService:
                 type=row.type,
                 grades_count=int(row.grades_count or 0),
                 average=float(row.average) if row.average is not None else None,
+                last_grade_date=row.last_grade_date,
             )
             for row in result.all()
         ]

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-21 19:37+0300\n"
+"POT-Creation-Date: 2026-11-21 22:37+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -18,15 +18,15 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: bot/handlers/callback/auth.py:38 bot/handlers/message/auth.py:54
+#: bot/handlers/callback/auth.py:38 bot/handlers/message/auth.py:55
 msgid "auth.enter_login"
 msgstr "📧 Enter edu email (login):"
 
-#: bot/handlers/callback/auth.py:79 bot/handlers/message/auth.py:157
+#: bot/handlers/callback/auth.py:79 bot/handlers/message/auth.py:162
 msgid "cancelled"
 msgstr "❌ Action cancelled."
 
-#: bot/handlers/callback/grades.py:74 bot/handlers/callback/grades.py:80
+#: bot/handlers/callback/grades.py:73 bot/handlers/callback/grades.py:79
 msgid "grades.not_found"
 msgstr "Journal not found."
 
@@ -38,51 +38,51 @@ msgstr "Info"
 msgid "stub.in_development"
 msgstr "🚧 In development"
 
-#: bot/handlers/callback/sync.py:29 bot/handlers/message/sync.py:67
-#: bot/tasks/sync.py:43
+#: bot/handlers/callback/sync.py:28 bot/handlers/message/sync.py:66
+#: bot/tasks/sync.py:42
 msgid "sync.auth_required"
 msgstr "🔒 Log in to edu-tpi: /start"
 
-#: bot/handlers/callback/sync.py:35 bot/handlers/message/sync.py:72
+#: bot/handlers/callback/sync.py:34 bot/handlers/message/sync.py:71
 msgid "sync.started"
 msgstr "⏳ Synchronization started…"
 
-#: bot/handlers/callback/sync.py:35 bot/handlers/message/sync.py:72
-#: bot/tasks/sync.py:42
+#: bot/handlers/callback/sync.py:34 bot/handlers/message/sync.py:71
+#: bot/tasks/sync.py:41
 msgid "sync.already_running"
 msgstr "⏳ Synchronization is already running…"
 
-#: bot/handlers/message/auth.py:83
+#: bot/handlers/message/auth.py:84
 msgid "auth.auth_started"
 msgstr "⏳ Authorization started..."
 
-#: bot/handlers/message/auth.py:97
+#: bot/handlers/message/auth.py:98
 msgid "auth.unavailable"
 msgstr "⚠️ Journal service is unavailable."
 
-#: bot/handlers/message/auth.py:109
+#: bot/handlers/message/auth.py:110
 msgid "auth.failed"
 msgstr "❌ Authorization failed. Try again:"
 
-#: bot/handlers/message/auth.py:123
+#: bot/handlers/message/auth.py:124
 msgid "auth.success"
 msgstr "✅ Authorization successfully!"
 
-#: bot/handlers/message/auth.py:143
+#: bot/handlers/message/auth.py:148
 msgid "logout.done"
 msgstr "✅ You are logged out of edu-tpi."
 
-#: bot/handlers/message/auth.py:180
+#: bot/handlers/message/auth.py:185
 msgid "auth.enter_login_invalid"
 msgstr "❌ Invalid email format. Try again:"
 
-#: bot/handlers/message/auth.py:192
+#: bot/handlers/message/auth.py:197
 msgid "auth.enter_pass_with_login"
 msgstr ""
 "📧 Login: {login}\n"
 "🔑 Enter edu password:"
 
-#: bot/handlers/message/auth.py:219
+#: bot/handlers/message/auth.py:224
 msgid "auth.enter_pass_invalid"
 msgstr "❌ Password cannot be empty. Try again:"
 
@@ -90,27 +90,27 @@ msgstr "❌ Password cannot be empty. Try again:"
 msgid "user counter"
 msgstr "user count: <b>{count}</b>"
 
-#: bot/handlers/message/grades.py:38
+#: bot/handlers/message/grades.py:42
 msgid "grades.no_journals"
-msgstr "No journals yet. Tap “Update”."
+msgstr "No graded journals yet. Tap “Update”."
 
-#: bot/handlers/message/grades.py:41
+#: bot/handlers/message/grades.py:45
 msgid "grades.title"
 msgstr "📊 Grades"
 
-#: bot/handlers/message/grades.py:42
+#: bot/handlers/message/grades.py:46
 msgid "grades.choose_journal"
 msgstr "Choose a journal:"
 
-#: bot/handlers/message/grades.py:64
+#: bot/handlers/message/grades.py:69
 msgid "grades.empty_journal"
 msgstr "No grades yet. Tap “Update”."
 
-#: bot/handlers/message/grades.py:65
+#: bot/handlers/message/grades.py:70
 msgid "sync.hint_update"
 msgstr "Tap “Update” to load your grades."
 
-#: bot/handlers/message/grades.py:89
+#: bot/handlers/message/grades.py:93
 msgid "grades.login_required"
 msgstr "🔒 Log in to edu-tpi to see grades: /start"
 
@@ -165,17 +165,17 @@ msgstr "Support"
 msgid "back button"
 msgstr "🔙 Back"
 
-#: bot/keyboards/inline/grades.py:32 bot/keyboards/inline/grades.py:42
-#: bot/keyboards/inline/grades.py:51
+#: bot/keyboards/inline/grades.py:35 bot/keyboards/inline/grades.py:45
+#: bot/keyboards/inline/grades.py:54
 msgid "grades.update_btn"
 msgstr "🔄 Update"
 
-#: bot/keyboards/inline/grades.py:33 bot/keyboards/inline/grades.py:43
-#: bot/keyboards/inline/grades.py:53
+#: bot/keyboards/inline/grades.py:36 bot/keyboards/inline/grades.py:44
+#: bot/keyboards/inline/grades.py:55
 msgid "grades.back_btn"
-msgstr "◀️ Back"
+msgstr "🏠 Main menu"
 
-#: bot/keyboards/inline/grades.py:41 bot/keyboards/inline/grades.py:52
+#: bot/keyboards/inline/grades.py:46 bot/keyboards/inline/grades.py:56
 msgid "grades.to_list_btn"
 msgstr "◀️ To list"
 
@@ -211,76 +211,96 @@ msgstr "🔄 Update"
 msgid "menu.auth_btn"
 msgstr "🔑 Log in"
 
-#: bot/tasks/sync.py:44
+#: bot/tasks/sync.py:43
 msgid "sync.parse_failed"
 msgstr "⚠️ Could not parse the journal. Try again later; contact support if it repeats."
 
-#: bot/tasks/sync.py:45
+#: bot/tasks/sync.py:44
 msgid "sync.unavailable"
 msgstr "⚠️ The journal is unavailable, try again later."
 
-#: bot/utils/formatters.py:48
+#: bot/utils/formatters.py:50
 msgid "last_grade"
 msgstr ""
 "Last received grade:\n"
 "{} in subject \"{}\" for {}"
 
-#: bot/utils/formatters.py:66
-msgid "grades.col_subject"
-msgstr "Subject"
+#: bot/utils/formatters.py:71
+msgid "grades.type_lecture"
+msgstr "L"
 
-#: bot/utils/formatters.py:67
+#: bot/utils/formatters.py:73
+msgid "grades.type_practice"
+msgstr "P"
+
+#: bot/utils/formatters.py:75
+msgid "grades.type_lab"
+msgstr "Lab"
+
+#: bot/utils/formatters.py:88
 msgid "grades.col_date"
 msgstr "Date"
 
-#: bot/utils/formatters.py:68
-msgid "grades.col_pair"
-msgstr "Pair"
+#: bot/utils/formatters.py:89
+msgid "grades.col_kind"
+msgstr "Type"
 
-#: bot/utils/formatters.py:69
-msgid "grades.col_grade"
+#: bot/utils/formatters.py:90
+msgid "grades.col_value"
+msgstr "Value"
+
+#: bot/utils/formatters.py:101
+msgid "grades.kind_mark"
 msgstr "Grade"
 
-#: bot/utils/formatters.py:70
-msgid "grades.col_visit"
+#: bot/utils/formatters.py:103
+msgid "grades.kind_pass"
 msgstr "Attendance"
 
-#: bot/utils/formatters.py:112
-msgid "grades.legend"
-msgstr "Н — absent · У — valid reason · Б — sick · О — late"
-
-#: bot/utils/formatters.py:118
+#: bot/utils/formatters.py:130
 msgid "grades.average_none"
 msgstr "Average: —"
 
-#: bot/utils/formatters.py:119
+#: bot/utils/formatters.py:131
 msgid "grades.average"
 msgstr "Average: {0}"
 
-#: bot/utils/formatters.py:128
+#: bot/utils/formatters.py:140 bot/utils/formatters.py:143
 msgid "grades.journal_line"
-msgstr "• {0} — avg {1} ({2} grades)"
+msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:136
+#: bot/utils/formatters.py:152
 msgid "sync.summary"
 msgstr "📊 Sync complete: {new} new, {updated} updated."
 
-#: bot/utils/formatters.py:138
+#: bot/utils/formatters.py:154
 msgid "sync.no_changes"
 msgstr "✅ No changes."
 
-#: bot/utils/formatters.py:144
+#: bot/utils/formatters.py:160
 msgid "sync.partial_errors"
 msgstr "⚠️ Could not update journals: {count}."
 
-#: bot/utils/formatters.py:146
+#: bot/utils/formatters.py:161
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:148
+#: bot/utils/formatters.py:163
 msgid "sync.more_errors"
 msgstr "…and {count} more."
 
 #: bot/utils/main_menu.py:16
 msgid "last_grade.none"
 msgstr "No grades found"
+
+#~ msgid "grades.col_subject"
+#~ msgstr "Subject"
+
+#~ msgid "grades.col_grade"
+#~ msgstr "Grade"
+
+#~ msgid "grades.col_visit"
+#~ msgstr "Attendance"
+
+#~ msgid "grades.legend"
+#~ msgstr "Н — absent · У — valid reason · Б — sick · О — late"

@@ -428,14 +428,3 @@ class EduTpiClient:
             message = f"В журнале {journal_id} нет студентов"
             raise EduEmptyJournalError(message)
         return parsed
-
-    async def collect_journals(self, token: str, year: str) -> list[JournalBrief]:
-        """Журналы обоих семестров; в марте видны и осенние оценки (docs/API.md §1)."""
-        result: list[JournalBrief] = []
-        seen: set[int] = set()
-        for sem in (1, 2):
-            for journal in await self.list_journals(token, year, sem):
-                if journal.id not in seen:
-                    seen.add(journal.id)
-                    result.append(journal)
-        return result

@@ -2,7 +2,7 @@
 
 Алгоритм (docs/ARCHITECTURE.md §8):
 
-1. журналы обоих семестров через `EduTpiClient.collect_journals` (кеш в `JournalCache`);
+1. журналы текущего семестра через `EduTpiClient.list_journals` (кеш в `JournalCache`);
 2. занятия студента из журнала, ключ — `(date, hour_number)`;
 3. новые — вставка, изменённые — обновление с `updated_at`, пропавшие — **не удаляем**;
 4. ошибка одного журнала не валит всю синхронизацию, кроме `EduAuthError`.
@@ -15,7 +15,6 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 from dataclasses import dataclass, field
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -47,6 +46,7 @@ if TYPE_CHECKING:
 
 
 SEPTEMBER = 9
+JANUARY = 1
 
 
 def academic_year(today: dt.date | None = None) -> str:
@@ -55,6 +55,18 @@ def academic_year(today: dt.date | None = None) -> str:
     if current.month >= SEPTEMBER:
         return f"{current.year}-{current.year + 1}"
     return f"{current.year - 1}-{current.year}"
+
+
+def current_semester(today: dt.date | None = None) -> int:
+    """Текущий семестр: 1 — сентябрь–январь, 2 — февраль–август.
+
+    Следующий семестр не запрашиваем: его журналы ещё пустые, а лишние запросы
+    к edu-tpi тратят лимит. Оценки прошлых семестров остаются в БД.
+    """
+    current = today or dt.datetime.now(TIMEZONE).date()
+    if current.month >= SEPTEMBER or current.month == JANUARY:
+        return 1
+    return 2
 
 
 @dataclass(slots=True)
@@ -224,13 +236,12 @@ class GradeSyncService:
 
     async def _list_journals(self) -> list[JournalBrief]:
         year = academic_year()
-        by_id: dict[int, JournalBrief] = {}
-        for sem in (1, 2):
-            operation = partial(self._client.list_journals, year=year, sem=sem)
-            journals = await self._tokens.call(operation)
-            for brief in journals:
-                by_id.setdefault(brief.id, brief)
-        return list(by_id.values())
+        semester = current_semester()
+        journals = await self._tokens.call(
+            lambda token: self._client.list_journals(token, year=year, sem=semester),
+        )
+        # Список уже одного семестра; дубликаты на всякий случай убираем по id.
+        return list({brief.id: brief for brief in journals}.values())
 
     async def _sync_journal(self, user: UserSyncInfo, brief: JournalBrief) -> JournalSyncResult:
         edu_user_id = user.edu_user_id

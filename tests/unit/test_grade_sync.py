@@ -15,7 +15,7 @@ from bot.core.errors import EduAuthError, EduEmptyJournalError, EduUnavailableEr
 from bot.database.models import Grade
 from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.integrations.models import JournalBrief, JournalPayload, Lesson, StudentGrades
-from bot.services.grade_sync import GradeSyncService, academic_year
+from bot.services.grade_sync import GradeSyncService, academic_year, current_semester
 from bot.services.grades import GradesService
 from bot.services.users import UserSyncInfo
 
@@ -59,8 +59,10 @@ class FakeTokens:
 class FakeClient:
     def __init__(self, briefs: list[JournalBrief]) -> None:
         self.briefs = briefs
+        self.sems: list[int] = []
 
     async def list_journals(self, _token: str, *, year: str, sem: int) -> list[JournalBrief]:
+        self.sems.append(sem)
         return self.briefs if sem == 1 else []
 
 
@@ -133,13 +135,17 @@ def sync_env(monkeypatch: pytest.MonkeyPatch):
     }
 
 
-def _service(cache: FakeCache, briefs: list[JournalBrief]) -> GradeSyncService:
+def _service(
+    cache: FakeCache,
+    briefs: list[JournalBrief],
+    client: FakeClient | None = None,
+) -> GradeSyncService:
     session = MagicMock()
     session.commit = AsyncMock()
     session.rollback = AsyncMock()
     return GradeSyncService(
         session=session,
-        client=FakeClient(briefs),  # type: ignore[arg-type]
+        client=client or FakeClient(briefs),  # type: ignore[arg-type]
         cache=cache,  # type: ignore[arg-type]
         tokens=FakeTokens(),  # type: ignore[arg-type]
         sync_type=SyncType.MANUAL,
@@ -271,3 +277,20 @@ async def test_unauthenticated_user_is_rejected(sync_env) -> None:
 def test_academic_year_switches_in_september() -> None:
     assert academic_year(dt.date(2026, 8, 31)) == "2025-2026"
     assert academic_year(dt.date(2026, 9, 1)) == "2026-2027"
+
+
+def test_current_semester_does_not_request_the_future_one() -> None:
+    assert current_semester(dt.date(2026, 9, 1)) == 1
+    assert current_semester(dt.date(2026, 12, 31)) == 1
+    assert current_semester(dt.date(2027, 1, 15)) == 1
+    assert current_semester(dt.date(2027, 2, 1)) == 2
+    assert current_semester(dt.date(2027, 6, 30)) == 2
+
+
+async def test_sync_requests_only_current_semester(sync_env) -> None:
+    client = FakeClient([JournalBrief(id=10, name="Журнал 10")])
+    service = _service(FakeCache({10: _payload(10, ())}), [], client=client)
+
+    await service.sync_user(1)
+
+    assert client.sems == [current_semester()]

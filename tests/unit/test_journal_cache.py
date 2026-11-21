@@ -6,6 +6,7 @@ import hashlib
 
 import pytest
 
+from bot.core.errors import EduEmptyJournalError
 from bot.integrations.journal_cache import GRADE_VALUES_KEY, LEGEND_KEY, JournalCache, journal_key, subgroup_key
 from bot.integrations.models import JournalPayload, Lesson, StudentGrades
 
@@ -13,12 +14,19 @@ from bot.integrations.models import JournalPayload, Lesson, StudentGrades
 class FakeClient:
     """Клиент, который отдаёт заранее заданные журналы и считает запросы."""
 
-    def __init__(self, payloads: dict[str, JournalPayload]) -> None:
+    def __init__(
+        self,
+        payloads: dict[str, JournalPayload],
+        errors: dict[str, Exception] | None = None,
+    ) -> None:
         self._payloads = payloads
+        self._errors = errors or {}
         self.calls: list[tuple[str, int]] = []
 
     async def get_journal(self, token: str, journal_id: int) -> JournalPayload:
         self.calls.append((token, journal_id))
+        if token in self._errors:
+            raise self._errors[token]
         return self._payloads[token]
 
 
@@ -147,3 +155,18 @@ async def test_cached_journal_of_other_student_is_not_returned(fake_redis) -> No
     with pytest.raises(Exception, match="не найден"):
         # Кеш хранит только 1001; для 1002 клиент вернул журнал без него — ParseError.
         await cache.get_journal(token="a", journal_id=27919, group_id=3273, edu_user_id=1002)
+
+
+async def test_empty_journal_is_negative_cached_for_that_student(fake_redis) -> None:
+    client = FakeClient({}, errors={"token": EduEmptyJournalError("empty")})
+    cache = JournalCache(fake_redis, client)  # type: ignore[arg-type]
+
+    with pytest.raises(EduEmptyJournalError):
+        await cache.get_journal(token="token", journal_id=27919, group_id=3273, edu_user_id=1001)
+    with pytest.raises(EduEmptyJournalError):
+        await cache.get_journal(token="token", journal_id=27919, group_id=3273, edu_user_id=1001)
+
+    assert len(client.calls) == 1
+    empty_key = f"{journal_key(3273, 27919)}:empty:1001"
+    assert await fake_redis.exists(empty_key)
+    assert await fake_redis.ttl(empty_key) > 0

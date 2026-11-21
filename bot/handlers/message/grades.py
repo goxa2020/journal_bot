@@ -20,7 +20,12 @@ from bot.keyboards.inline.grades import (
 from bot.keyboards.inline.menu import get_main_menu_keyboard
 from bot.services.grades import GradesService
 from bot.services.users import is_authorized
-from bot.utils.formatters import format_average, format_grades_legend, format_grades_table, format_journals_overview
+from bot.utils.formatters import (
+    format_average,
+    format_grades_table,
+    format_journals_overview,
+    journal_display_name,
+)
 from bot.utils.main_menu import get_main_menu
 
 if TYPE_CHECKING:
@@ -56,10 +61,11 @@ async def render_journal(
         return None
 
     grades = await GradesService.get_journal_grades(session, user_id, journal_id)
+    display_name = journal_display_name(summary.name, summary.type)
     if not grades:
         text = "\n\n".join(
             (
-                f"<b>{html.escape(summary.name)}</b>",
+                f"<b>{html.escape(display_name)}</b>",
                 _("grades.empty_journal"),
                 _("sync.hint_update"),
             ),
@@ -68,9 +74,8 @@ async def render_journal(
 
     text = "\n\n".join(
         (
-            format_grades_table(summary.name, grades),
+            format_grades_table(display_name, grades),
             format_average(summary.average),
-            format_grades_legend(),
         ),
     )
     return text, get_grades_keyboard()

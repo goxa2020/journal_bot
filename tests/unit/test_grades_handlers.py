@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from bot.handlers.callback.grades import JOURNAL_PREFIX, grades_back_to_list, grades_show_journal
 from bot.handlers.message.grades import grades_command, render_journal, render_journals
+from bot.keyboards.inline.grades import get_grades_keyboard, get_journals_keyboard
 from bot.services.grades import GradesService, JournalSummary
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ async def test_render_journals_empty_state(monkeypatch: pytest.MonkeyPatch, ru_l
 
     text, keyboard = await render_journals(AsyncMock(), 1)
 
-    assert "Журналов пока нет" in text
+    assert "Журналов с оценками пока нет" in text
     callbacks = [button.callback_data for row in keyboard.inline_keyboard for button in row]
     assert "update" in callbacks
 
@@ -84,7 +85,9 @@ async def test_render_journal_table(monkeypatch: pytest.MonkeyPatch, ru_locale) 
     text, _keyboard = rendered
     assert "<pre>" in text
     assert "Средний балл" in text
-    assert "Н — отсутствовал" in text
+    assert "Оценка" in text
+    assert "Н — отсутствовал" not in text
+    assert "Пара" not in text
 
 
 async def test_grades_command_for_unauthorized_user_asks_to_login(
@@ -147,3 +150,24 @@ async def test_callback_back_to_list_edits_same_message(monkeypatch: pytest.Monk
 
     edit.assert_awaited_once_with(callback.message, 77, "список", None)
     callback.answer.assert_awaited_once()
+
+
+def test_detail_keyboard_has_menu_first_and_list_second(ru_locale) -> None:
+    keyboard = get_grades_keyboard()
+    rows = [[button.callback_data for button in row] for row in keyboard.inline_keyboard]
+
+    assert rows == [["grades:menu", "update"], ["grades:list"]]
+    assert keyboard.inline_keyboard[0][0].text == "🏠 Главное меню"
+
+
+def test_journals_keyboard_marks_lecture_and_practice(ru_locale) -> None:
+    journals = [
+        JournalSummary(id=1, name="Английский", teacher_name="", type="Лек", grades_count=2, average=4.5),
+        JournalSummary(id=2, name="Английский", teacher_name="", type="Пр", grades_count=2, average=4.0),
+    ]
+
+    keyboard = get_journals_keyboard(journals)
+    texts = [button.text for row in keyboard.inline_keyboard for button in row]
+
+    assert any(text.startswith("Английский Л") for text in texts)
+    assert any(text.startswith("Английский П") for text in texts)

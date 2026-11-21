@@ -12,11 +12,11 @@ from bot.utils.formatters import (
     TABLE_WIDTH,
     format_average,
     format_date,
-    format_grades_legend,
     format_grades_table,
     format_journals_overview,
     format_last_grade,
     format_sync_summary,
+    journal_display_name,
 )
 from bot.utils.main_menu import get_main_menu
 
@@ -86,13 +86,12 @@ def _table_lines(text: str) -> list[str]:
     return body.splitlines()
 
 
-def test_long_subject_is_truncated_and_does_not_break_table(ru_locale) -> None:
-    title = "Очень длинное название дисциплины, которое заведомо не влезает в колонку таблицы оценок"
+def test_long_title_does_not_break_table(ru_locale) -> None:
+    title = "Очень длинное название дисциплины, которое заведомо не влезает в строку таблицы"
     text = format_grades_table(title, [_grade(hour=1, value="4", is_mark=True)])
 
     lines = _table_lines(text)
-    assert all(len(line) <= TABLE_WIDTH for line in lines)
-    assert "…" in lines[2]
+    assert all(len(line) == TABLE_WIDTH for line in lines)
     assert "<b>" in text
 
 
@@ -104,7 +103,7 @@ def test_empty_values_do_not_break_columns(ru_locale) -> None:
     assert "—" in lines[2]
 
 
-def test_marks_and_passes_go_to_their_columns(ru_locale) -> None:
+def test_table_has_one_value_column_without_subject_and_pair(ru_locale) -> None:
     text = format_grades_table(
         "Физика",
         [
@@ -113,17 +112,21 @@ def test_marks_and_passes_go_to_their_columns(ru_locale) -> None:
         ],
     )
     lines = _table_lines(text)
+    body = "\n".join(lines)
 
+    assert "Оценка" in lines[2]
     assert "4" in lines[2]
+    assert "Посещение" in lines[3]
     assert "Н" in lines[3]
-    assert all(len(line) == TABLE_WIDTH for line in lines)
+    assert "Физика" not in body
+    assert "Пара" not in body
 
 
-def test_legend_contains_all_marks(ru_locale) -> None:
-    legend = format_grades_legend()
-
-    for mark in ("Н", "У", "Б", "О"):
-        assert mark in legend
+def test_journal_display_name_adds_type_suffix(ru_locale) -> None:
+    assert journal_display_name("Английский язык", "Лек") == "Английский язык Л"
+    assert journal_display_name("Английский язык", "Пр") == "Английский язык П"
+    assert journal_display_name("Английский язык", "Лаб") == "Английский язык Лаб"
+    assert journal_display_name("Английский язык", "") == "Английский язык"
 
 
 def test_average_formatting(ru_locale) -> None:
@@ -131,7 +134,7 @@ def test_average_formatting(ru_locale) -> None:
     assert "—" in format_average(None)
 
 
-def test_journals_overview_truncates_long_names(ru_locale) -> None:
+def test_journals_overview_truncates_long_names_to_50(ru_locale) -> None:
     journals = [
         JournalSummary(
             id=1,
@@ -147,6 +150,8 @@ def test_journals_overview_truncates_long_names(ru_locale) -> None:
 
     assert "…" in text
     assert "4.50" in text
+    assert text.endswith(" Л — 4.50")
+    assert all(len(line) <= TABLE_WIDTH for line in text.splitlines())
 
 
 def test_sync_summary_without_errors(ru_locale) -> None:

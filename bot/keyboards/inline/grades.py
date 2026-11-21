@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 from aiogram.utils.i18n import gettext as _
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot.utils.formatters import journal_display_name
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -18,14 +20,15 @@ BUTTON_NAME_LIMIT = 32
 
 
 def _journal_button_text(journal: JournalSummary) -> str:
-    name = journal.name if len(journal.name) <= BUTTON_NAME_LIMIT else journal.name[: BUTTON_NAME_LIMIT - 1] + "…"
+    full_name = journal_display_name(journal.name, journal.type)
+    name = full_name if len(full_name) <= BUTTON_NAME_LIMIT else full_name[: BUTTON_NAME_LIMIT - 1] + "…"
     if journal.average is None:
         return name
     return f"{name} · {journal.average:.2f}"
 
 
 def get_journals_keyboard(journals: Sequence[JournalSummary]) -> InlineKeyboardMarkup:
-    """Список журналов: по кнопке на журнал, ниже «Обновить» и «Назад»."""
+    """Список журналов: по кнопке на журнал, ниже «Обновить» и «Главное меню»."""
     builder = InlineKeyboardBuilder()
     for journal in journals:
         builder.button(text=_journal_button_text(journal), callback_data=f"grades:j:{journal.id}")
@@ -36,11 +39,11 @@ def get_journals_keyboard(journals: Sequence[JournalSummary]) -> InlineKeyboardM
 
 
 def get_grades_keyboard() -> InlineKeyboardMarkup:
-    """Экран одного журнала: назад к списку, обновить, в главное меню."""
+    """Экран одного журнала: «Главное меню» и «К списку» поменяны местами."""
     builder = InlineKeyboardBuilder()
-    builder.button(text=_("grades.to_list_btn"), callback_data="grades:list")
-    builder.button(text=_("grades.update_btn"), callback_data="update")
     builder.button(text=_("grades.back_btn"), callback_data="grades:menu")
+    builder.button(text=_("grades.update_btn"), callback_data="update")
+    builder.button(text=_("grades.to_list_btn"), callback_data="grades:list")
     builder.adjust(2, 1)
     return builder.as_markup()
 
@@ -49,7 +52,7 @@ def get_grades_empty_keyboard() -> InlineKeyboardMarkup:
     """Пустое состояние: предложить обновить или вернуться."""
     builder = InlineKeyboardBuilder()
     builder.button(text=_("grades.update_btn"), callback_data="update")
-    builder.button(text=_("grades.to_list_btn"), callback_data="grades:list")
     builder.button(text=_("grades.back_btn"), callback_data="grades:menu")
+    builder.button(text=_("grades.to_list_btn"), callback_data="grades:list")
     builder.adjust(2, 1)
     return builder.as_markup()

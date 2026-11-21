@@ -21,6 +21,7 @@ from loguru import logger
 
 from bot.cache.serialization import JSONSerializer
 from bot.core.config import TIMEZONE
+from bot.core.errors import EduEmptyJournalError
 from bot.integrations.models import JournalPayload, Lesson, StudentGrades
 
 if TYPE_CHECKING:
@@ -77,13 +78,24 @@ class JournalCache:
     ) -> JournalPayload:
         """Журнал для студента: из кеша группы/подгруппы или запросом к edu-tpi."""
         base_key = journal_key(group_id, journal_id)
+        empty_key = f"{base_key}:empty:{edu_user_id}"
+
+        # Журнал чужой подгруппы (например, английский у второй подгруппы) API
+        # отдаёт пустым. Запоминаем это на TTL, чтобы не ходить за ним каждый раз.
+        if await self._redis.exists(empty_key):
+            message = f"Журнал {journal_id} недоступен студенту {edu_user_id}"
+            raise EduEmptyJournalError(message)
 
         cached = await self._find_in_cache(base_key, edu_user_id)
         if cached is not None:
             logger.debug("journal cache hit journal_id={} user_id={}", journal_id, edu_user_id)
             return cached
 
-        payload = await self._client.get_journal(token, journal_id)
+        try:
+            payload = await self._client.get_journal(token, journal_id)
+        except EduEmptyJournalError:
+            await self._redis.set(empty_key, b"1", ex=self._ttl)
+            raise
         if not payload.has_student(edu_user_id):
             # Студент не нашёлся по id — проверим ФИО, как советует docs/API.md §6.2.
             payload.find_student(edu_user_id, fio=fio, full_name=full_name)
