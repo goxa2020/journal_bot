@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 import datetime as dt
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -15,7 +16,7 @@ from bot.core.errors import EduAuthError, EduEmptyJournalError, EduUnavailableEr
 from bot.database.models import Grade
 from bot.database.models.sync_log import SyncStatus, SyncType
 from bot.integrations.models import JournalBrief, JournalPayload, Lesson, StudentGrades
-from bot.services.grade_sync import GradeSyncService, academic_year, current_semester
+from bot.services.grade_sync import GradeSyncService, NewGradeNotice, SyncSummary, academic_year, current_semester
 from bot.services.grades import GradesService
 from bot.services.users import UserSyncInfo
 
@@ -294,3 +295,94 @@ async def test_sync_requests_only_current_semester(sync_env) -> None:
     await service.sync_user(1)
 
     assert client.sems == [current_semester()]
+
+
+async def test_new_notices_describe_exactly_the_new_lessons(sync_env) -> None:
+    lessons = (_lesson(1, "4", number=4), _lesson(2, "Н"))
+    journal = JournalBrief(id=10, name="Журнал 10", type="Лек")
+    service = _service(FakeCache({10: _payload(10, lessons)}), [journal])
+
+    summary = await service.sync_user(1)
+
+    assert [notice.lesson_key for notice in summary.new_notices] == [
+        "10:2024-09-30:1",
+        "10:2024-09-30:2",
+    ]
+    first, second = summary.new_notices
+    assert first.journal_id == 10
+    assert first.journal_name == "Журнал 10"
+    assert first.journal_type == "Лек"
+    assert first.date == dt.date(2024, 9, 30)
+    assert first.value == "4"
+    assert first.number_value == 4
+    assert first.is_mark is True
+    assert second.value == "Н"
+    assert second.is_pass is True
+
+
+async def test_changed_grade_is_not_a_new_notice(sync_env) -> None:
+    journal = JournalBrief(id=10, name="Журнал 10")
+    sync_env["store"][(10, 1)] = _store_grade(10, _lesson(1, "4", number=4))
+    service = _service(FakeCache({10: _payload(10, (_lesson(1, "5", number=5),))}), [journal])
+
+    summary = await service.sync_user(1)
+
+    assert summary.updated_grades == 1
+    assert summary.new_grades == 0
+    assert summary.new_notices == []
+
+
+async def test_repeated_sync_has_no_new_notices(sync_env) -> None:
+    journal = JournalBrief(id=10, name="Журнал 10")
+    lessons = (_lesson(1, "4", number=4),)
+    service = _service(FakeCache({10: _payload(10, lessons)}), [journal])
+
+    await service.sync_user(1)
+    summary = await service.sync_user(1)
+
+    assert summary.new_grades == 0
+    assert summary.new_notices == []
+
+
+def test_sync_summary_as_dict_stays_json_safe() -> None:
+    notice = NewGradeNotice(
+        journal_id=10,
+        journal_name="Журнал 10",
+        journal_type="Лек",
+        date=dt.date(2024, 9, 30),
+        hour_number=1,
+        value="4",
+        number_value=4,
+        is_mark=True,
+    )
+    summary = SyncSummary(
+        user_id=1,
+        sync_type=SyncType.MANUAL,
+        status=SyncStatus.SUCCESS,
+        new_grades=1,
+        new_notices=[notice],
+        language_code="ru",
+    )
+
+    payload = summary.as_dict()
+
+    assert json.loads(json.dumps(payload)) == payload
+    assert payload["new_notices"] == 1
+    assert "notices" not in payload
+
+
+def test_new_grade_notice_dict_roundtrip() -> None:
+    notice = NewGradeNotice(
+        journal_id=10,
+        journal_name="Журнал 10",
+        journal_type="Пр",
+        date=dt.date(2024, 9, 30),
+        hour_number=2,
+        value="Н",
+        is_pass=True,
+    )
+
+    restored = NewGradeNotice.from_dict(json.loads(json.dumps(notice.to_dict())))
+
+    assert restored == notice
+    assert restored.lesson_key == "10:2024-09-30:2"

@@ -69,6 +69,60 @@ def current_semester(today: dt.date | None = None) -> int:
     return 2
 
 
+@dataclass(frozen=True, slots=True)
+class NewGradeNotice:
+    """Новая оценка, о которой нужно уведомить пользователя (задача 3.1).
+
+    Ключ урока (`lesson_key`) — то же самое, что ключ дедупликации уведомлений:
+    `journal_id:date:hour_number`. Он не хранится полем, а вычисляется, чтобы не
+    разойтись с данными: ключ должен совпадать у постановки маркера и у проверки.
+    """
+
+    journal_id: int
+    journal_name: str
+    journal_type: str
+    date: dt.date
+    hour_number: int
+    value: str
+    number_value: int | None = None
+    is_mark: bool = False
+    is_pass: bool = False
+
+    @property
+    def lesson_key(self) -> str:
+        """Ключ урока для `notify:sent:{user_id}:{lesson_key}`."""
+        return f"{self.journal_id}:{self.date.isoformat()}:{self.hour_number}"
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-безопасная запись для Redis и аргументов задачи Celery."""
+        return {
+            "journal_id": self.journal_id,
+            "journal_name": self.journal_name,
+            "journal_type": self.journal_type,
+            "date": self.date.isoformat(),
+            "hour_number": self.hour_number,
+            "value": self.value,
+            "number_value": self.number_value,
+            "is_mark": self.is_mark,
+            "is_pass": self.is_pass,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> NewGradeNotice:
+        """Восстановить уведомление из JSON-записи (`to_dict`)."""
+        return cls(
+            journal_id=int(data["journal_id"]),
+            journal_name=str(data["journal_name"]),
+            journal_type=str(data.get("journal_type") or ""),
+            date=dt.date.fromisoformat(str(data["date"])),
+            hour_number=int(data["hour_number"]),
+            value=str(data.get("value") or ""),
+            number_value=int(data["number_value"]) if data.get("number_value") is not None else None,
+            is_mark=bool(data.get("is_mark")),
+            is_pass=bool(data.get("is_pass")),
+        )
+
+
 @dataclass(slots=True)
 class JournalSyncResult:
     """Итог по одному журналу: сколько нового/обновлённого и была ли ошибка."""
@@ -79,6 +133,7 @@ class JournalSyncResult:
     updated_grades: int = 0
     error: str | None = None
     skipped: bool = False
+    notices: list[NewGradeNotice] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -93,6 +148,8 @@ class SyncSummary:
     journals: list[JournalSyncResult] = field(default_factory=list)
     error_codes: list[str] = field(default_factory=list)
     language_code: str | None = None
+    #: Новые уроки с данными для сообщения (задача 3.1); в результат задачи не уходят.
+    new_notices: list[NewGradeNotice] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """Сериализуемый результат задачи Celery (в backend уходит JSON)."""
@@ -104,6 +161,7 @@ class SyncSummary:
             "updated_grades": self.updated_grades,
             "journals": len(self.journals),
             "error_codes": list(self.error_codes),
+            "new_notices": len(self.new_notices),
         }
 
 
@@ -210,6 +268,7 @@ class GradeSyncService:
             summary.journals.append(result)
             summary.new_grades += result.new_grades
             summary.updated_grades += result.updated_grades
+            summary.new_notices.extend(result.notices)
             if result.error is None:
                 successful_journals += 1
             else:
@@ -287,6 +346,20 @@ class GradeSyncService:
             name=brief.name,
             new_grades=len(new_lessons),
             updated_grades=len(changed),
+            notices=[
+                NewGradeNotice(
+                    journal_id=brief.id,
+                    journal_name=payload.name or brief.name,
+                    journal_type=brief.type or payload.type,
+                    date=lesson.date,
+                    hour_number=lesson.hour_number,
+                    value=lesson.value,
+                    number_value=lesson.number_value,
+                    is_mark=lesson.is_mark,
+                    is_pass=lesson.is_pass,
+                )
+                for lesson in new_lessons
+            ],
         )
 
     async def _rollback(self) -> None:

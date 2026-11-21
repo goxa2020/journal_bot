@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from datetime import date
 
-    from bot.services.grade_sync import SyncSummary
+    from bot.services.grade_sync import NewGradeNotice, SyncSummary
     from bot.services.grades import JournalSummary
 
 DATE_FORMAT = "%d.%m.%Y"
@@ -65,21 +65,25 @@ def _fit(value: str, width: int) -> str:
     return _truncate(value, width).ljust(width)
 
 
-def _journal_type_suffix(journal_type: str) -> str:
+def _journal_type_suffix(journal_type: str, translate: Translator | None = None) -> str:
     """Пометка вида занятия: лекция и практика часто называются одинаково."""
+    t: Callable[[str], str] = translate or _
     raw = journal_type.strip().lower()
     if raw.startswith("лек") or raw == "л":
-        return _("grades.type_lecture")
+        return t(n_("grades.type_lecture"))
     if raw.startswith("пр") or raw == "п":
-        return _("grades.type_practice")
+        return t(n_("grades.type_practice"))
     if raw.startswith("лаб"):
-        return _("grades.type_lab")
+        return t(n_("grades.type_lab"))
     return ""
 
 
-def journal_display_name(name: str, journal_type: str) -> str:
-    """Название журнала с пометкой «Л»/«П»/«Лаб» в конце."""
-    suffix = _journal_type_suffix(journal_type)
+def journal_display_name(name: str, journal_type: str, translate: Translator | None = None) -> str:
+    """Название журнала с пометкой «Л»/«П»/«Лаб» в конце.
+
+    `translate` нужен воркеру: там нет aiogram-контекста i18n, и `_()` не работает.
+    """
+    suffix = _journal_type_suffix(journal_type, translate)
     return f"{name} {suffix}" if suffix else name
 
 
@@ -145,6 +149,27 @@ def format_journals_overview(journals: Sequence[JournalSummary]) -> str:
             line = _overview_line(name, average)
         lines.append(line)
     return "\n".join(lines)
+    return "\n".join(lines)
+
+
+def format_new_grades(notices: Sequence[NewGradeNotice], translate: Translator | None = None) -> str:
+    """Сообщение о новых оценках: заголовок и строки «дата — предмет — значение».
+
+    Одна пачка — одно сообщение: и днём, и в утренней сводке (задачи 3.1–3.2).
+    Название журнала приходит из API, поэтому экранируется: в HTML-разметке Telegram
+    символы `<`, `>` и `&` сломали бы сообщение.
+    """
+    t: Callable[[str], str] = translate or _
+    lines = [t(n_("notifications.title"))]
+    for notice in notices:
+        name = journal_display_name(notice.journal_name, notice.journal_type, translate)
+        lines.append(
+            t(n_("notifications.line")).format(
+                date=format_date(notice.date),
+                name=html.escape(name),
+                value=html.escape(notice.value or EMPTY_CELL),
+            ),
+        )
     return "\n".join(lines)
 
 

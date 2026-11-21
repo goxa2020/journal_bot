@@ -17,6 +17,8 @@ EventType = Literal[
     "View Item",
     "Complete Purchase",
     "Error",
+    "New Grade",
+    "Sync New Grades",
 ]
 PaymentMethod = Literal["Stripe", "PayPal", "Square", "Crypto"]
 
@@ -35,6 +37,9 @@ class EventProperties(BaseModel):
     text: str | None = None
     command: str | None = None
     payment_method: PaymentMethod | None = None
+    #: Бизнес-события воркера: сколько оценок и по какому каналу.
+    count: int | None = None
+    kind: str | None = None
 
 
 class Plan(BaseModel):

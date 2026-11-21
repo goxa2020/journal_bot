@@ -23,6 +23,10 @@ os.environ.setdefault("ENCRYPTION_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 os.environ.setdefault("DB_HOST", "127.0.0.1")
 os.environ.setdefault("REDIS_HOST", "127.0.0.1")
 os.environ.setdefault("TELEGRAM_PROXY", "")
+# Аналитика из воркера: пустой ключ = тихий no-op, тесты не ходят в сеть даже если
+# в локальном `.env` ключ заполнен.
+os.environ.setdefault("AMPLITUDE_API_KEY", "")
+os.environ.setdefault("POSTHOG_API_KEY", "")
 
 TEST_ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]
 

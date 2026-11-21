@@ -1,4 +1,5 @@
 from __future__ import annotations
+import datetime as dt
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ if TYPE_CHECKING:
     from aiogram.types import User as tg_User
     from sqlalchemy.ext.asyncio import AsyncSession
 
+DEFAULT_MORNING_NOTIFICATION_TIME = dt.time(8, 0)
+
 
 @dataclass(frozen=True, slots=True)
 class UserSyncInfo:
@@ -24,6 +27,16 @@ class UserSyncInfo:
     group_name: str | None
     full_name: str | None
     language_code: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationSettings:
+    """Настройки уведомлений пользователя (задачи 3.1–3.3), без ORM-объекта."""
+
+    enabled: bool
+    morning_enabled: bool
+    morning_time: dt.time
+    language_code: str | None = None
 
 
 async def add_user(
@@ -286,6 +299,54 @@ async def load_user_sync_info(session: AsyncSession, user_id: int) -> UserSyncIn
         full_name=row[5],
         language_code=row[6],
     )
+
+
+async def load_notification_settings(session: AsyncSession, user_id: int) -> NotificationSettings | None:
+    """Настройки уведомлений пользователя — одним запросом и без кеша.
+
+    Версия без `@cached`, как `load_edu_credentials`: её читает и воркер, а глобальный
+    Redis-клиент бота (`bot.core.loader`) задачам недоступен.
+    """
+    query = select(
+        User.notification_enabled,
+        User.morning_notification_enabled,
+        User.morning_notification_time,
+        User.language_code,
+    ).filter_by(id=user_id)
+
+    row = (await session.execute(query)).first()
+    if row is None:
+        return None
+    return NotificationSettings(
+        enabled=bool(row[0]),
+        morning_enabled=bool(row[1]),
+        morning_time=row[2] or DEFAULT_MORNING_NOTIFICATION_TIME,
+        language_code=row[3],
+    )
+
+
+async def set_notification_enabled(session: AsyncSession, user_id: int, *, enabled: bool) -> None:
+    """Включить/выключить уведомления (экран `/settings` и блокировка бота)."""
+    stmt = update(User).where(User.id == user_id).values(notification_enabled=enabled)
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def set_morning_notification(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    enabled: bool,
+    morning_time: dt.time,
+) -> None:
+    """Ночное накопление: флаг и время утренней сводки."""
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .values(morning_notification_enabled=enabled, morning_notification_time=morning_time)
+    )
+    await session.execute(stmt)
+    await session.commit()
 
 
 async def logout_user(session: AsyncSession, user_id: int) -> None:

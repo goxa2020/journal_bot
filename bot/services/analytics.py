@@ -1,8 +1,9 @@
 from __future__ import annotations
+import asyncio
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from aiogram.types import CallbackQuery, Message
+from loguru import logger as loguru_logger
 
 from bot.analytics.amplitude import AmplitudeTelegramLogger
 from bot.analytics.types import AbstractAnalyticsLogger, BaseEvent, EventProperties, EventType, UserProperties
@@ -12,7 +13,12 @@ from bot.utils.singleton import SingletonMeta
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from aiogram.types import CallbackQuery, Message
+
 _Func = TypeVar("_Func")
+
+#: Потолок ожидания аналитики из задачи: провайдер не должен задерживать уведомление.
+ANALYTICS_TIMEOUT_SECONDS = 3
 
 
 class AnalyticsService(metaclass=SingletonMeta):
@@ -42,6 +48,10 @@ class AnalyticsService(metaclass=SingletonMeta):
         ) -> Callable[..., Awaitable[_Func]]:
             @wraps(handler)
             async def wrapper(update: Message | CallbackQuery, *args: Any, **kwargs: Any) -> Any:
+                # aiogram импортируется здесь, а не на уровне модуля: этот модуль читают
+                # и Celery-задачи (`track_worker_event`), которым aiogram не нужен.
+                from aiogram.types import CallbackQuery, Message  # noqa: PLC0415
+
                 if not self.logger:
                     return await handler(update, *args, **kwargs)
 
@@ -105,3 +115,34 @@ class AnalyticsService(metaclass=SingletonMeta):
 logger = AmplitudeTelegramLogger(api_token=settings.AMPLITUDE_API_KEY) if settings.AMPLITUDE_API_KEY else None
 
 analytics = AnalyticsService(logger)
+
+
+async def track_worker_event(
+    user_id: int,
+    event_name: EventType,
+    *,
+    language: str | None = None,
+    properties: EventProperties | None = None,
+) -> None:
+    """Событие из Celery-задачи: без `Message`/`CallbackQuery` и без падений.
+
+    Нет ключа аналитики — тихий no-op. Провайдер ответил ошибкой или недоступен —
+    предупреждение в лог и `return`: уведомление о новой оценке важнее аналитики.
+    """
+    if logger is None:
+        return
+
+    try:
+        await asyncio.wait_for(
+            logger.log_event(
+                BaseEvent(
+                    user_id=user_id,
+                    event_type=event_name,
+                    language=language,
+                    event_properties=properties,
+                ),
+            ),
+            timeout=ANALYTICS_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001 — аналитика не должна влиять на отправку
+        loguru_logger.warning("analytics event failed name={} error={}", event_name, type(exc).__name__)

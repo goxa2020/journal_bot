@@ -18,7 +18,7 @@ from celery.signals import worker_process_init
 
 from bot.celery_config import APP_NAME, CELERY_CONFIG, TASK_ROUTES
 
-celery_app = Celery(APP_NAME, include=["bot.tasks.service", "bot.tasks.sync"])
+celery_app = Celery(APP_NAME, include=["bot.tasks.service", "bot.tasks.sync", "bot.tasks.notify"])
 celery_app.config_from_object(CELERY_CONFIG, namespace=None)
 
 # Маршрутизация: см. bot/celery_config.py (по именам задач, а не по объектам).

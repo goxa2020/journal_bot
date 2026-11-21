@@ -23,13 +23,16 @@ from bot.core.errors import (
     PermanentError,
     RetryableError,
 )
+from bot.core.metrics import observe_new_grades
 from bot.database.models.sync_log import SyncType
 from bot.integrations.edu_tpi import EduTpiClient
 from bot.integrations.journal_cache import JournalCache
+from bot.services.analytics import EventProperties, track_worker_event
 from bot.services.auth import TokenService
-from bot.services.grade_sync import GradeSyncService, SyncSummary
+from bot.services.grade_sync import GradeSyncService, NewGradeNotice, SyncSummary
 from bot.services.users import load_user_sync_info
 from bot.tasks.base import BaseTask, run_async, send_telegram_message, task_lock, task_redis, task_session
+from bot.tasks.notify import notify_new_grades
 from bot.utils.formatters import format_sync_summary
 from bot.utils.misc import n_
 from bot.utils.translations import translate
@@ -84,7 +87,37 @@ async def _run_sync(
                     return None, "parse", language
                 except (EduUnavailableError, EduRateLimitError):
                     return None, "unavailable", language
+                await _track_sync(summary, sync_type)
                 return summary, None, language
+
+
+def _metrics_type(sync_type: SyncType) -> str:
+    """Метка `type` для `sync_new_grades`: manual или auto."""
+    return "manual" if sync_type is SyncType.MANUAL else "auto"
+
+
+async def _track_sync(summary: SyncSummary, sync_type: SyncType) -> None:
+    """Метрика и событие аналитики: сколько новых оценок нашла синхронизация."""
+    observe_new_grades(_metrics_type(sync_type), summary.new_grades)
+    await track_worker_event(
+        summary.user_id,
+        "Sync New Grades",
+        language=summary.language_code,
+        properties=EventProperties(count=summary.new_grades, kind=_metrics_type(sync_type)),
+    )
+
+
+def _notify(user_id: int, notices: list[NewGradeNotice]) -> dict[str, Any]:
+    """Уведомить о новых оценках, не ломая уже состоявшуюся синхронизацию.
+
+    Если Telegram недоступен, пользователь всё равно получит сводку синхронизации:
+    уведомление — приятный бонус, а результат его действия — обязательство.
+    """
+    try:
+        return run_async(notify_new_grades(user_id, notices, manual=True))
+    except RetryableError:
+        logger.warning("notification failed user={} — summary fallback", user_id)
+        return {"status": "failed"}
 
 
 def _summary_message(summary: SyncSummary, language: str | None) -> str:
@@ -120,6 +153,18 @@ def sync_user_manual(self: BaseTask, user_id: int) -> dict[str, Any]:
     if summary is None:  # pragma: no cover — защита от рассинхронизации веток
         message = "Синхронизация завершилась без результата"
         raise PermanentError(message)
+
+    # Одно сообщение вместо сводки и уведомления: новые оценки уходят списком,
+    # счётчик «новых N» пользователь видит только если уведомления выключены.
+    outcome: dict[str, Any] = {"status": "skipped"}
+    if summary.new_notices:
+        outcome = _notify(user_id, summary.new_notices)
+
+    if outcome.get("status") == "sent":
+        return summary.as_dict()
+    if outcome.get("status") == "blocked":
+        # Бот заблокирован — сводка тоже не дойдёт, второй ошибки не создаём.
+        return summary.as_dict()
 
     run_async(send_telegram_message(user_id, _summary_message(summary, language)))
     return summary.as_dict()

@@ -1,16 +1,18 @@
 """Задачи синхронизации в eager-режиме (задача 2.6)."""
 
 from __future__ import annotations
+import datetime as dt
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from celery.exceptions import Retry
+from prometheus_client import REGISTRY
 
 from bot.core.errors import EduAuthError, EduUnavailableError, ParseError, PermanentError
 from bot.database.models.sync_log import SyncStatus, SyncType
-from bot.services.grade_sync import JournalSyncResult, SyncSummary
+from bot.services.grade_sync import JournalSyncResult, NewGradeNotice, SyncSummary
 from bot.services.users import UserSyncInfo
 from bot.tasks.sync import sync_user_after_login, sync_user_manual
 
@@ -87,6 +89,111 @@ def _summary() -> SyncSummary:
         journals=[JournalSyncResult(journal_id=10, name="Журнал 10", new_grades=2)],
         language_code="ru",
     )
+
+
+def _notified_summary() -> SyncSummary:
+    summary = _summary()
+    summary.new_notices = [
+        NewGradeNotice(
+            journal_id=10,
+            journal_name="Журнал 10",
+            journal_type="Лек",
+            date=dt.date(2024, 9, 30),
+            hour_number=hour,
+            value="4",
+            number_value=4,
+            is_mark=True,
+        )
+        for hour in (1, 2)
+    ]
+    return summary
+
+
+def _metric(sync_type: str) -> float:
+    return REGISTRY.get_sample_value("sync_new_grades_total", {"type": sync_type}) or 0.0
+
+
+def test_manual_sync_sends_notification_instead_of_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+) -> None:
+    service = FakeSyncService(summary=_notified_summary())
+    send = _install_environment(monkeypatch, service)
+    notify = AsyncMock(return_value={"kind": "immediate", "status": "sent", "count": 2})
+    monkeypatch.setattr("bot.tasks.sync.notify_new_grades", notify)
+
+    result = sync_user_manual.apply(args=(1,)).get()
+
+    notify.assert_awaited_once()
+    assert notify.await_args.kwargs["manual"] is True
+    # Одно сообщение: сводка не отправляется, если ушло уведомление.
+    send.assert_not_awaited()
+    assert result["new_notices"] == 2
+
+
+def test_manual_sync_falls_back_to_summary_when_notifications_are_off(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+) -> None:
+    service = FakeSyncService(summary=_notified_summary())
+    send = _install_environment(monkeypatch, service)
+    monkeypatch.setattr(
+        "bot.tasks.sync.notify_new_grades",
+        AsyncMock(return_value={"kind": "none", "status": "skipped"}),
+    )
+
+    sync_user_manual.apply(args=(1,)).get()
+
+    send.assert_awaited_once()
+    assert "Синхронизация завершена" in send.await_args.args[1]
+
+
+def test_manual_sync_does_not_send_summary_when_the_bot_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+) -> None:
+    service = FakeSyncService(summary=_notified_summary())
+    send = _install_environment(monkeypatch, service)
+    monkeypatch.setattr(
+        "bot.tasks.sync.notify_new_grades",
+        AsyncMock(return_value={"kind": "immediate", "status": "blocked"}),
+    )
+
+    sync_user_manual.apply(args=(1,)).get()
+
+    send.assert_not_awaited()
+
+
+def test_after_login_never_notifies(monkeypatch: pytest.MonkeyPatch, celery_eager) -> None:
+    service = FakeSyncService(summary=_notified_summary())
+    send = _install_environment(monkeypatch, service)
+    notify = AsyncMock()
+    monkeypatch.setattr("bot.tasks.sync.notify_new_grades", notify)
+
+    sync_user_after_login.apply(args=(1,)).get()
+
+    notify.assert_not_awaited()
+    send.assert_not_awaited()
+
+
+def test_manual_sync_counts_new_grades(monkeypatch: pytest.MonkeyPatch, celery_eager) -> None:
+    service = FakeSyncService(summary=_summary())
+    _install_environment(monkeypatch, service)
+    before = _metric("manual")
+
+    sync_user_manual.apply(args=(1,)).get()
+
+    assert _metric("manual") == before + 2
+
+
+def test_after_login_counts_new_grades_as_auto(monkeypatch: pytest.MonkeyPatch, celery_eager) -> None:
+    service = FakeSyncService(summary=_summary())
+    _install_environment(monkeypatch, service)
+    before = _metric("auto")
+
+    sync_user_after_login.apply(args=(1,)).get()
+
+    assert _metric("auto") == before + 2
 
 
 def test_manual_sync_sends_summary(monkeypatch: pytest.MonkeyPatch, celery_eager) -> None:

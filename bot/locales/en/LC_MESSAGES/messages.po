@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: messages. VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-21 23:22+0300\n"
+"POT-Creation-Date: 2026-11-22 00:25+0300\n"
 "PO-Revision-Date: 2024-01-14 14:51+0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -34,12 +34,17 @@ msgstr "Journal not found."
 msgid "info button"
 msgstr "Info"
 
+#: bot/handlers/callback/settings.py:41 bot/handlers/callback/settings.py:48
+#: bot/handlers/message/settings.py:55
+msgid "settings.login_required"
+msgstr "🔒 Log in to edu-tpi to change settings: /start"
+
 #: bot/handlers/callback/stubs.py:15
 msgid "stub.in_development"
 msgstr "🚧 In development"
 
 #: bot/handlers/callback/sync.py:28 bot/handlers/message/sync.py:66
-#: bot/tasks/sync.py:42
+#: bot/tasks/sync.py:45
 msgid "sync.auth_required"
 msgstr "🔒 Log in to edu-tpi: /start"
 
@@ -48,7 +53,7 @@ msgid "sync.started"
 msgstr "⏳ Synchronization started…"
 
 #: bot/handlers/callback/sync.py:34 bot/handlers/message/sync.py:71
-#: bot/tasks/sync.py:41
+#: bot/tasks/sync.py:44
 msgid "sync.already_running"
 msgstr "⏳ Synchronization is already running…"
 
@@ -117,6 +122,26 @@ msgstr "🔒 Log in to edu-tpi to see grades: /start"
 #: bot/handlers/message/info.py:11
 msgid "about"
 msgstr "ℹ️ <b>About</b>"
+
+#: bot/handlers/message/settings.py:32
+msgid "settings.title"
+msgstr "⚙️ Notification settings"
+
+#: bot/handlers/message/settings.py:34
+msgid "settings.notifications_line"
+msgstr "Notifications: {state}"
+
+#: bot/handlers/message/settings.py:35
+msgid "settings.night_line"
+msgstr "Collect at night: {state}"
+
+#: bot/handlers/message/settings.py:36
+msgid "settings.morning_line"
+msgstr "Morning summary time: {time}"
+
+#: bot/handlers/message/settings.py:38
+msgid "settings.hint"
+msgstr "At night (22:00–07:59) new grades are collected and arrive as one message in the morning."
 
 #: bot/handlers/message/start.py:15
 msgid "welcome_back_1"
@@ -211,11 +236,37 @@ msgstr "🔄 Update"
 msgid "menu.auth_btn"
 msgstr "🔑 Log in"
 
-#: bot/tasks/sync.py:43
-msgid "sync.parse_failed"
-msgstr "⚠️ Could not parse the journal. Try again later; contact support if it repeats."
+#: bot/keyboards/inline/settings.py:27
+msgid "settings.state_on"
+msgstr "on"
 
-#: bot/tasks/sync.py:44
+#: bot/keyboards/inline/settings.py:27
+msgid "settings.state_off"
+msgstr "off"
+
+#: bot/keyboards/inline/settings.py:34
+msgid "settings.notifications_btn"
+msgstr "🔔 Notifications: {state}"
+
+#: bot/keyboards/inline/settings.py:38
+msgid "settings.night_btn"
+msgstr "🌙 Collect at night: {state}"
+
+#: bot/keyboards/inline/settings.py:42
+msgid "settings.morning_btn"
+msgstr "⏰ Morning: {time}"
+
+#: bot/keyboards/inline/settings.py:45
+msgid "settings.menu_btn"
+msgstr "🏠 Main menu"
+
+#: bot/tasks/sync.py:46
+msgid "sync.parse_failed"
+msgstr ""
+"⚠️ Could not parse the journal. Try again later; contact support if it "
+"repeats."
+
+#: bot/tasks/sync.py:47
 msgid "sync.unavailable"
 msgstr "⚠️ The journal is unavailable, try again later."
 
@@ -261,23 +312,31 @@ msgstr "• {0}"
 msgid "grades.journal_line"
 msgstr "• {0} — {1}"
 
-#: bot/utils/formatters.py:155
+#: bot/utils/formatters.py:159
+msgid "notifications.title"
+msgstr "📊 New grades"
+
+#: bot/utils/formatters.py:163
+msgid "notifications.line"
+msgstr "{date} — {name} — {value}"
+
+#: bot/utils/formatters.py:176
 msgid "sync.summary"
 msgstr "📊 Sync complete: {new} new, {updated} updated."
 
-#: bot/utils/formatters.py:157
+#: bot/utils/formatters.py:178
 msgid "sync.no_changes"
 msgstr "✅ No changes."
 
-#: bot/utils/formatters.py:163
+#: bot/utils/formatters.py:184
 msgid "sync.partial_errors"
 msgstr "⚠️ Could not update journals: {count}."
 
-#: bot/utils/formatters.py:164
+#: bot/utils/formatters.py:185
 msgid "sync.journal_error"
 msgstr "• {name}"
 
-#: bot/utils/formatters.py:166
+#: bot/utils/formatters.py:187
 msgid "sync.more_errors"
 msgstr "…and {count} more."
 
