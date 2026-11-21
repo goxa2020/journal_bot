@@ -241,6 +241,7 @@ bot/
 | `journal_legend:global` | JSON | 30 дней | `journalLegend` |
 | `grade_values:global` | JSON | 30 дней | справочник `journalVal` |
 | `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя |
+| `sync:queued:{user_id}` | строка | 30 с | защита от повторной постановки задачи при двойном нажатии «Обновить» |
 | `ratelimit:{user_id}` | счётчик | 60 с | лимит апдейтов от пользователя |
 | `notifications:night:{user_id}` | list | до 09:00 | накопленные ночные оценки |
 | `notify:sent:{user_id}:{lesson_key}` | строка | 7 дней | защита от повторного уведомления |
@@ -562,6 +563,7 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | 5xx, таймаут | `EduUnavailableError` | Retry 3× (60/120/240 с) | «⚠️ Журнал недоступен, попробуйте позже» |
 | 429 | `EduRateLimitError` | Retry с большей паузой | — |
 | Изменилась схема ответа | `ParseError` | Без retry, лог + алерт админу | «⚠️ Не удалось разобрать журнал» |
+| Архивный журнал: `state: -2`, `data: null` | `EduEmptyJournalError` | Пропуск журнала, без retry | — |
 | Telegram: бот заблокирован | `TelegramForbidden` | `notification_enabled=False` | — |
 | Telegram: 429 | `TelegramRetryAfter` | `sleep(retry_after)`, повтор | — |
 | Нет `ENCRYPTION_KEY` | `ConfigError` | Падение на старте | — |
