@@ -316,7 +316,7 @@ tests/
 Технический долг (W1–W5) добавил тесты маппинга id журнала (`test_journal_cache.py`,
 `test_group_sync.py`), `/metrics` и `/healthz` воркера и имени файла лога
 (`test_worker_metrics.py`), проверку `state` в `get_user_info`, повреждённых credentials,
-display-width таблиц (эмодзи/CJK) и лимитов edu-tpi из настроек. Всего **268 тестов**.
+display-width таблиц (эмодзи/CJK) и лимитов edu-tpi из настроек. Всего **282 теста**.
 
 Локали: `.mo` не в git, а тесты проверяют русские тексты. `tests/conftest.py` на импорте
 компилирует `.po` → `.mo`, если `.mo` нет или он старше `.po`, поэтому на чистом клоне

@@ -62,7 +62,7 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
 - ✅ наблюдаемость: Prometheus scrape'ит бота, воркера и celery-exporter; дашборд Grafana
   «Celery / sync» (очередь, активные задачи, ошибки, `sync_batch_*`, `notifications_total`);
 - ✅ админ-панель Flask-Admin: вход по ролям, список пользователей;
-- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 268 тестов,
+- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 282 теста,
   jobs «Run tests» и «Run pre-commit» в CI;
 - ✅ Docker Compose: бот, воркер, beat, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы,
   Prometheus, Grafana, celery-exporter.

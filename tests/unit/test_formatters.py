@@ -11,6 +11,7 @@ from bot.services.grades import GradesService, JournalSummary
 from bot.utils.formatters import (
     GRADES_TABLE_WIDTH,
     TABLE_WIDTH,
+    display_width,
     format_average,
     format_date,
     format_grades_table,
@@ -239,3 +240,72 @@ def test_journals_overview_empty_list_is_empty_string(count: int, ru_locale) -> 
 
     text = format_journals_overview(journals)
     assert text.count("\n") == max(count - 1, 0)
+
+
+def test_display_width_counts_cells_not_code_points() -> None:
+    """W1.13: эмодзи и CJK занимают две ячейки, комбинирующие знаки — ноль."""
+    assert display_width("12345") == 5
+    assert display_width("Привет") == 6
+    assert display_width("😀") == 2
+    assert display_width("漢") == 2
+    assert display_width("e\u0301") == 1
+    assert display_width("😀漢") == 4
+
+
+def test_grades_table_with_emoji_fits_by_display_width(ru_locale) -> None:
+    """Длинное значение из эмодзи режется по ячейкам, а не по code points."""
+    text = format_grades_table("Физика", [_grade(hour=1, value="😀" * 30)])
+
+    lines = _table_lines(text)
+    assert all(display_width(line) == GRADES_TABLE_WIDTH for line in lines)
+    # Обрезка по ширине: эмодзи-строка не может остаться длиннее колонки.
+    assert all(display_width(line) <= GRADES_TABLE_WIDTH for line in lines)
+
+
+def test_grades_table_with_cjk_title_and_values(ru_locale) -> None:
+    text = format_grades_table("物理", [_grade(hour=1, value="漢字", is_mark=True)])
+
+    lines = _table_lines(text)
+    assert all(display_width(line) == GRADES_TABLE_WIDTH for line in lines)
+    assert "漢字" in lines[2]
+
+
+@pytest.mark.parametrize("value", ["1", "2", "3", "4", "5", "Н", "У", "Б", "О"])
+def test_known_grade_values_keep_table_width(value: str, ru_locale) -> None:
+    lines = _table_lines(format_grades_table("Физика", [_grade(hour=1, value=value)]))
+    assert all(display_width(line) == GRADES_TABLE_WIDTH for line in lines)
+    assert value in lines[2]
+
+
+def test_journals_overview_with_cjk_name_fits_by_display_width(ru_locale) -> None:
+    """Список журналов обрезается до 50 ячеек, а не до 50 code points."""
+    journal = JournalSummary(
+        id=1,
+        name="信息系统与技术软件开发程序设计基础理论与实践课程设计",
+        teacher_name="",
+        type="Лек",
+        grades_count=1,
+        average=4.5,
+    )
+
+    text = format_journals_overview([journal])
+
+    assert display_width(text) <= TABLE_WIDTH
+    assert text.endswith(" Л — 4.50")
+
+
+def test_journals_overview_with_emoji_name_fits_by_display_width(ru_locale) -> None:
+    journal = JournalSummary(
+        id=1,
+        name="Проектирование 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        teacher_name="",
+        type="Пр",
+        grades_count=1,
+        average=None,
+    )
+
+    text = format_journals_overview([journal])
+
+    assert display_width(text) <= TABLE_WIDTH
+    assert text.endswith(" П")
+    assert "😀" in text  # эмодзи не сломали обрезку
