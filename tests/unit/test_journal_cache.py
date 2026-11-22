@@ -6,8 +6,15 @@ import hashlib
 
 import pytest
 
-from bot.core.errors import EduEmptyJournalError
-from bot.integrations.journal_cache import GRADE_VALUES_KEY, LEGEND_KEY, JournalCache, journal_key, subgroup_key
+from bot.core.errors import EduEmptyJournalError, ParseError
+from bot.integrations.journal_cache import (
+    GRADE_VALUES_KEY,
+    LEGEND_KEY,
+    JournalCache,
+    journal_key,
+    student_key,
+    subgroup_key,
+)
 from bot.integrations.models import JournalPayload, Lesson, StudentGrades
 
 
@@ -170,3 +177,97 @@ async def test_empty_journal_is_negative_cached_for_that_student(fake_redis) -> 
     empty_key = f"{journal_key(3273, 27919)}:empty:1001"
     assert await fake_redis.exists(empty_key)
     assert await fake_redis.ttl(empty_key) > 0
+
+
+NAME = "Студентов Степан Степанович"
+
+
+def _named_payload(journal_id: int, students: tuple[StudentGrades, ...]) -> JournalPayload:
+    return JournalPayload(
+        journal_id=journal_id,
+        name="Программирование",
+        type="Лек",
+        students=students,
+        legend={"Н": "Студент отсутствовал"},
+    )
+
+
+def _student(student_id: int, *, full_name: str = NAME, fio: str = "Студентов С.С.") -> StudentGrades:
+    return StudentGrades(
+        student_id=student_id,
+        lessons=(
+            Lesson(
+                date=dt.date(2024, 9, 30),
+                hour_number=1,
+                edu_lesson_id=346734,
+                value="4",
+                number_value=4,
+                is_mark=True,
+            ),
+        ),
+        fio=fio,
+        full_name=full_name,
+    )
+
+
+async def test_redirected_student_id_is_mapped_and_gives_cache_hit(fake_redis) -> None:
+    """W4: `tokenauth` id ≠ `journalData.id` — находим по ФИО и запоминаем id на 30 дней."""
+    client = FakeClient({"token": _named_payload(27919, (_student(5001),))})
+    cache = JournalCache(fake_redis, client)  # type: ignore[arg-type]
+
+    await cache.get_journal(
+        token="token",
+        journal_id=27919,
+        group_id=3273,
+        edu_user_id=-22069,
+        fio="Студентов С.С.",
+        full_name=NAME,
+    )
+
+    assert await cache.get_student_id(-22069) == 5001
+    ttl = await fake_redis.ttl(student_key(-22069))
+    assert 29 * 24 * 60 * 60 < ttl <= 30 * 24 * 60 * 60
+
+    # Повторный журнал того же студента берётся из кеша по маппингу, без HTTP.
+    await cache.get_journal(
+        token="token",
+        journal_id=27919,
+        group_id=3273,
+        edu_user_id=-22069,
+        fio="Студентов С.С.",
+        full_name=NAME,
+    )
+    assert len(client.calls) == 1
+
+
+async def test_ambiguous_full_name_does_not_create_mapping(fake_redis) -> None:
+    """Однофамильцы: сопоставление неоднозначно — ошибка и никакого маппинга."""
+    client = FakeClient({"token": _named_payload(27919, (_student(5001), _student(5002)))})
+    cache = JournalCache(fake_redis, client)  # type: ignore[arg-type]
+
+    with pytest.raises(ParseError):
+        await cache.get_journal(
+            token="token",
+            journal_id=27919,
+            group_id=3273,
+            edu_user_id=-22069,
+            fio="Студентов С.С.",
+            full_name=NAME,
+        )
+
+    assert await fake_redis.exists(student_key(-22069)) == 0
+
+
+async def test_known_mapping_is_used_before_full_name(fake_redis) -> None:
+    """Сохранённый id строки журнала важнее ФИО: однофамилец не перехватит журнал."""
+    await fake_redis.set(student_key(-22069), "5001")
+    client = FakeClient({"token": _named_payload(27919, (_student(5001), _student(5002, full_name=NAME)))})
+    cache = JournalCache(fake_redis, client)  # type: ignore[arg-type]
+
+    student_id = await cache.resolve_student_id(
+        _named_payload(27919, (_student(5001), _student(5002, full_name=NAME))),
+        edu_user_id=-22069,
+        full_name=NAME,
+    )
+
+    assert student_id == 5001

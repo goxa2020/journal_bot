@@ -128,6 +128,42 @@ class JournalPayload:
         message = f"Студент {edu_user_id} не найден в журнале {self.journal_id}"
         raise ParseError(message)
 
+    def unique_student_by_name(self, *, fio: str | None = None, full_name: str | None = None) -> StudentGrades | None:
+        """Строка студента по ФИО, только если совпадение однозначное.
+
+        У `tokenauth` и `journalData` разные пространства id (на проде
+        `users.edu_user_id = -22069`), поэтому сопоставление по ФИО — резервное.
+        Однофамильцы (или пустое ФИО) дают `None`: угадывать чужую строку нельзя.
+        """
+        if not fio and not full_name:
+            return None
+        matches = [
+            student
+            for student in self.students
+            if (fio is not None and student.fio == fio) or (full_name is not None and student.full_name == full_name)
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    def resolve_student_id(
+        self,
+        edu_user_id: int,
+        *,
+        fio: str | None = None,
+        full_name: str | None = None,
+        known_id: int | None = None,
+    ) -> int | None:
+        """id строки журнала для пользователя: id → сохранённый id → однозначное ФИО.
+
+        `None` — студента нет в журнале или ФИО неоднозначно. Это чистая функция;
+        Redis-маппинг (`journal:student:*`) передаёт сюда `known_id`.
+        """
+        if self.has_student(edu_user_id):
+            return edu_user_id
+        if known_id is not None and self.has_student(known_id):
+            return known_id
+        student = self.unique_student_by_name(fio=fio, full_name=full_name)
+        return student.student_id if student is not None else None
+
     def lessons_for(
         self,
         edu_user_id: int,

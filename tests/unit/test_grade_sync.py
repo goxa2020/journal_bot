@@ -82,6 +82,30 @@ class FakeCache:
             raise self.errors[journal_id]
         return self.payloads[journal_id]
 
+    async def match_student(
+        self,
+        payload: JournalPayload,
+        *,
+        edu_user_id: int,
+        fio: str | None = None,
+        full_name: str | None = None,
+    ) -> int | None:
+        return payload.resolve_student_id(edu_user_id, fio=fio, full_name=full_name)
+
+    async def resolve_student_id(
+        self,
+        payload: JournalPayload,
+        *,
+        edu_user_id: int,
+        fio: str | None = None,
+        full_name: str | None = None,
+    ) -> int:
+        student_id = await self.match_student(payload, edu_user_id=edu_user_id, fio=fio, full_name=full_name)
+        if student_id is None:
+            msg = f"Студент {edu_user_id} не найден в журнале {payload.journal_id}"
+            raise ParseError(msg)
+        return student_id
+
 
 def _store_grade(
     journal_id: int,

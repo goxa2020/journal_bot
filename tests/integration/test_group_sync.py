@@ -17,7 +17,7 @@ import pytest
 from bot.core.errors import EduAuthError, EduEmptyJournalError, RetryableError
 from bot.database.models import Grade
 from bot.database.models.sync_log import SyncStatus, SyncType
-from bot.integrations.journal_cache import JournalCache
+from bot.integrations.journal_cache import JournalCache, student_key
 from bot.integrations.models import EduUser, JournalBrief, JournalPayload, Lesson, StudentGrades, TokenInfo
 from bot.services.auth import save_token
 from bot.services.grades import GradesService
@@ -109,6 +109,17 @@ class FakeClient:
         if error is not None:
             raise error
         return self._payloads[(token, journal_id)]
+
+    async def match_student(
+        self,
+        payload: JournalPayload,
+        *,
+        edu_user_id: int,
+        fio: str | None = None,
+        full_name: str | None = None,
+    ) -> int | None:
+        """То же правило, что у `JournalCache`, но без Redis-маппинга."""
+        return payload.resolve_student_id(edu_user_id, fio=fio, full_name=full_name)
 
 
 @pytest.fixture
@@ -477,6 +488,14 @@ async def test_member_is_matched_by_full_name_when_edu_id_differs(
     assert summary.new_grades == 1
     assert (1, JOURNAL_ID) in {(user_id, journal_id) for user_id, journal_id, *_ in sync_env["store"]}
     assert [user_id for user_id, _ in notifier.calls] == [1]
+    # W4: найденный по ФИО id строки журнала сохранён в маппинг и применён ровно один раз.
+    assert await redis.get(student_key(-22069)) == b"5001"
+    assert len(sync_env["store"]) == 1
+
+    # Повторный прогон того же журнала обслуживается кешем: без маппинга он снова
+    # искал бы -22069 в journal:{group}:{journal} и делал бы HTTP-запрос.
+    await _service(redis, client, [member], notifier=notifier).sync_all()
+    assert len(client.journal_calls) == 1
 
 
 async def test_every_journal_is_applied_even_after_member_left_unprocessed(

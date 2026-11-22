@@ -368,11 +368,16 @@ class GradeSyncService:
             message = f"У пользователя {user.id} нет edu_user_id или group_id"
             raise PermanentError(message)
 
-        lessons = payload.lessons_for(
-            edu_user_id,
+        # id из `tokenauth` может не совпадать с `journalData.id` (W4): кеш знает
+        # маппинг и подсказывает id строки журнала; ФИО — только при однозначном
+        # совпадении, иначе `ParseError` (как раньше).
+        student_id = await self._cache.resolve_student_id(
+            payload,
+            edu_user_id=edu_user_id,
             fio=user.full_name,
             full_name=user.full_name,
         )
+        lessons = payload.lessons_for(student_id)
         incoming = [_normalized(lesson) for lesson in lessons]
         incoming = [lesson for lesson in incoming if not lesson.is_empty]
 
@@ -430,14 +435,22 @@ class GradeSyncService:
         if group_id is None:
             return
 
-        student_ids = set(payload.student_ids)
         members = self._group_members.get(group_id)
         if members is None:
             members = await load_group_members(self._session, group_id)
             self._group_members[group_id] = members
 
         for member in members:
-            if member.id == user.id or member.edu_user_id is None or member.edu_user_id not in student_ids:
+            if member.id == user.id or member.edu_user_id is None:
+                continue
+            # Сопоставление по id строки журнала (с маппингом W4) или однозначному ФИО.
+            peer_id = await self._cache.match_student(
+                payload,
+                edu_user_id=member.edu_user_id,
+                fio=member.full_name,
+                full_name=member.full_name,
+            )
+            if peer_id is None:
                 continue
             try:
                 async with self._member_lock(member.id) as acquired:

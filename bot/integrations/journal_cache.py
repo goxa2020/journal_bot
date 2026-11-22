@@ -21,7 +21,7 @@ from loguru import logger
 
 from bot.cache.serialization import JSONSerializer
 from bot.core.config import TIMEZONE
-from bot.core.errors import EduEmptyJournalError
+from bot.core.errors import EduEmptyJournalError, ParseError
 from bot.integrations.models import JournalPayload, Lesson, StudentGrades
 
 if TYPE_CHECKING:
@@ -31,9 +31,17 @@ if TYPE_CHECKING:
 
 JOURNAL_TTL_SECONDS = 15 * 60
 REFERENCE_TTL_SECONDS = 30 * 24 * 60 * 60
+#: Маппинг `users.edu_user_id` → id строки `journalData` (W4). 30 дней: id студента
+#: в журнале меняется ещё реже, чем TTL справочников.
+STUDENT_ID_TTL_SECONDS = 30 * 24 * 60 * 60
 
 LEGEND_KEY = "journal_legend:global"
 GRADE_VALUES_KEY = "grade_values:global"
+
+
+def student_key(edu_user_id: int) -> str:
+    """Ключ маппинга id из `tokenauth` на id строки `journalData` (W4)."""
+    return f"journal:student:{edu_user_id}"
 
 
 def journal_key(group_id: int | None, journal_id: int) -> str:
@@ -86,7 +94,7 @@ class JournalCache:
             message = f"Журнал {journal_id} недоступен студенту {edu_user_id}"
             raise EduEmptyJournalError(message)
 
-        cached = await self._find_in_cache(base_key, edu_user_id)
+        cached = await self._find_in_cache(base_key, await self._candidate_ids(edu_user_id))
         if cached is not None:
             logger.debug("journal cache hit journal_id={} user_id={}", journal_id, edu_user_id)
             return cached
@@ -96,9 +104,9 @@ class JournalCache:
         except EduEmptyJournalError:
             await self._redis.set(empty_key, b"1", ex=self._ttl)
             raise
-        if not payload.has_student(edu_user_id):
-            # Студент не нашёлся по id — проверим ФИО, как советует docs/API.md §6.2.
-            payload.find_student(edu_user_id, fio=fio, full_name=full_name)
+        # id из `tokenauth` может не совпадать с id строки `journalData`: ищем по
+        # сохранённому маппингу и по ФИО, а найденный id запоминаем (W4).
+        await self.resolve_student_id(payload, edu_user_id=edu_user_id, fio=fio, full_name=full_name)
 
         store_key = subgroup_key(base_key, payload.student_ids) if payload.is_subgroup else base_key
         await self._store(store_key, payload)
@@ -110,9 +118,75 @@ class JournalCache:
         await self.store_grade_values(payload)
         return payload
 
-    async def _find_in_cache(self, base_key: str, edu_user_id: int) -> JournalPayload | None:
+    async def resolve_student_id(
+        self,
+        payload: JournalPayload,
+        *,
+        edu_user_id: int,
+        fio: str | None = None,
+        full_name: str | None = None,
+    ) -> int:
+        """id строки журнала; заполняет маппинг, если студент найден по ФИО.
+
+        Raises:
+            ParseError: студента нет в журнале или ФИО совпало с несколькими строками.
+
+        """
+        student_id = await self.match_student(payload, edu_user_id=edu_user_id, fio=fio, full_name=full_name)
+        if student_id is None:
+            message = f"Студент {edu_user_id} не найден в журнале {payload.journal_id}"
+            raise ParseError(message)
+        return student_id
+
+    async def match_student(
+        self,
+        payload: JournalPayload,
+        *,
+        edu_user_id: int,
+        fio: str | None = None,
+        full_name: str | None = None,
+    ) -> int | None:
+        """Найти студента, не падая на промахе; однозначное ФИО кешируется на 30 дней."""
+        known_id = await self.get_student_id(edu_user_id)
+        student_id = payload.resolve_student_id(edu_user_id, fio=fio, full_name=full_name, known_id=known_id)
+        if student_id is None:
+            if fio or full_name:
+                # В лог — только id и журнал: ФИО и id строки журнала это ПДн.
+                logger.warning(
+                    "journal student ambiguous journal_id={} user_id={}",
+                    payload.journal_id,
+                    edu_user_id,
+                )
+            return None
+        if student_id not in (edu_user_id, known_id):
+            await self.store_student_id(edu_user_id, student_id)
+        return student_id
+
+    async def get_student_id(self, edu_user_id: int) -> int | None:
+        """Сохранённый id строки `journalData`; `None`, если маппинга ещё нет."""
+        raw = await self._redis.get(student_key(edu_user_id))
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            logger.warning("journal student map corrupt user_id={}", edu_user_id)
+            return None
+
+    async def store_student_id(self, edu_user_id: int, journal_user_id: int) -> None:
+        """Запомнить id строки журнала; пишется только при однозначном совпадении."""
+        await self._redis.set(student_key(edu_user_id), str(journal_user_id), ex=STUDENT_ID_TTL_SECONDS)
+
+    async def _candidate_ids(self, edu_user_id: int) -> tuple[int, ...]:
+        """Кого искать в кеше: сначала id из маппинга, затем id из `tokenauth`."""
+        known_id = await self.get_student_id(edu_user_id)
+        if known_id is None or known_id == edu_user_id:
+            return (edu_user_id,)
+        return (known_id, edu_user_id)
+
+    async def _find_in_cache(self, base_key: str, candidate_ids: tuple[int, ...]) -> JournalPayload | None:
         payload = await self._load(base_key)
-        if payload is not None and payload.has_student(edu_user_id):
+        if payload is not None and any(payload.has_student(student_id) for student_id in candidate_ids):
             return payload
 
         # Первый студент подгруппы пишет свой ключ; второй студент другой подгруппы
@@ -121,7 +195,7 @@ class JournalCache:
         async for raw_key in self._redis.scan_iter(match=f"{prefix}*"):
             key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
             payload = await self._load(key)
-            if payload is not None and payload.has_student(edu_user_id):
+            if payload is not None and any(payload.has_student(student_id) for student_id in candidate_ids):
                 return payload
         return None
 

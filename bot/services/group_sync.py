@@ -368,7 +368,7 @@ class GroupSyncService:
             key = (member.id, brief.id)
             if key in applied:
                 continue
-            if not self._payload_has_member(payload, member):
+            if not await self._payload_has_member(payload, member):
                 continue
             applied.add(key)
             matched.append(member)
@@ -384,20 +384,22 @@ class GroupSyncService:
             if member.edu_user_id is not None:
                 unprocessed.pop(member.edu_user_id, None)
 
-    @staticmethod
-    def _payload_has_member(payload: JournalPayload, member: UserSyncInfo) -> bool:
-        """Есть ли участник в журнале — по id, а при расхождении id по ФИО.
+    async def _payload_has_member(self, payload: JournalPayload, member: UserSyncInfo) -> bool:
+        """Есть ли участник в журнале — по id, маппингу и однозначному ФИО.
 
-        `GradeSyncService.apply_payload` ищет студента так же (`JournalPayload.find_student`):
-        id — основной ключ, ФИО — резервный, потому что `journalData.id` и `userID` из
-        `tokenauth` могут не совпадать.
+        `GradeSyncService.apply_payload` ищет студента так же (`JournalCache.match_student`):
+        id — основной ключ, `journal:student:*` — сохранённый id строки журнала, ФИО —
+        резервный, потому что `journalData.id` и `userID` из `tokenauth` расходятся (W4).
         """
-        if member.edu_user_id is not None and payload.has_student(member.edu_user_id):
-            return True
-        full_name = member.full_name
-        if not full_name:
+        if member.edu_user_id is None:
             return False
-        return any(full_name in (student.fio, student.full_name) for student in payload.students)
+        student_id = await self._cache.match_student(
+            payload,
+            edu_user_id=member.edu_user_id,
+            fio=member.full_name,
+            full_name=member.full_name,
+        )
+        return student_id is not None
 
     async def _apply_member(
         self,
