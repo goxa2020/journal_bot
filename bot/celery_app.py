@@ -39,7 +39,7 @@ celery_app.conf.beat_schedule = {
 }
 
 
-# celery не поставляет типы, поэтому декоратор сигнала для mypy нетипизированный.
+# Celery 5.7.0 не поставляет типы, поэтому декоратор сигнала для mypy нетипизированный.
 @worker_process_init.connect  # type: ignore[untyped-decorator]
 def _configure_task_logging(**_: Any) -> None:
     """Настроить логи задач в каждом процессе воркера (файл + stdout)."""

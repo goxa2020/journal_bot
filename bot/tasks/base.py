@@ -225,7 +225,7 @@ def configure_task_logging() -> None:
     _LOGGING_READY.add(pid)
 
 
-# celery не поставляет типы (нет py.typed), поэтому для mypy Task — это Any.
+# Celery 5.7.0 не поставляет типы (нет py.typed), поэтому для mypy Task — это Any.
 class BaseTask(Task):  # type: ignore[misc]
     """База задач: повторы для временных ошибок, лог и метрики для всех.
 

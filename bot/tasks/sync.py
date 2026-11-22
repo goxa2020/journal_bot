@@ -336,7 +336,7 @@ async def _run_batch() -> dict[str, Any]:
     return summary.as_dict()
 
 
-# celery не поставляет типы, поэтому декоратор задачи для mypy нетипизированный.
+# Celery 5.7.0 не поставляет типы, поэтому декоратор задачи для mypy нетипизированный.
 @celery_app.task(  # type: ignore[untyped-decorator]
     base=BaseTask,
     bind=True,

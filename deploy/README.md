@@ -50,8 +50,10 @@ Dockerfile  .dockerignore  docker-compose.yml  docker-compose.prod.yml  deploy/x
 взаимоисключается с обычным режимом по смыслу, но с `-ImageFile`/`-DeliverImage` его
 указывать нельзя (скрипт завершится ошибкой).
 
-Проверено 22.11.2026: локальная сборка → gzip 265 МБ → scp → `docker load` → `up -d
---no-build` → `bot`/`worker` healthy, второй поллер не поднимался.
+Проверено 22.11.2026: локальная сборка → gzip 88 МБ → scp → `docker load` → `up -d
+--no-build` → `bot`/`worker` healthy, второй поллер не поднимался; на проде
+`sync_all_users` после доставки — success, первый прогон 15.3 с (15 журналов), повторный
+1.4 с (всё из кеша по маппингу `journal:student:-22069` → `22069`).
 
 ## Сервер
 

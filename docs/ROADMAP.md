@@ -539,7 +539,8 @@ admin-чат из БД: запрос прошёл без ошибок (`admins: 
   `test_redirected_student_id_is_mapped_and_gives_cache_hit`,
   `test_ambiguous_full_name_does_not_create_mapping`,
   `test_member_is_matched_by_full_name_when_edu_id_differs` (повторный прогон — cache hit,
-  HTTP-запросов не прибавилось).
+  HTTP-запросов не прибавилось). На проде: маппинг `journal:student:-22069` → `22069`,
+  первый `sync_all_users` — 15.3 с, повторный — 1.4 с, `new=0`, ошибок нет.
 - ~~**Метрики воркера не экспортируются по HTTP**~~ — W2.1.
 - ~~**Алерт админам на проде не провоцировался**~~ — ограничение, W6.2 (логика покрыта
   `tests/unit/test_sync_batch.py`).
