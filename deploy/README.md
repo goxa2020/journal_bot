@@ -35,6 +35,24 @@ Dockerfile  .dockerignore  docker-compose.yml  docker-compose.prod.yml  deploy/x
 
 Появился каталог, нужный в рантайме, — добавьте его в `$paths` внутри `deploy.ps1`.
 
+## Режимы доставки
+
+| Режим | Команда | Когда |
+|---|---|---|
+| Сборка на сервере | `pwsh deploy/deploy.ps1` | обычный деплой, сервер резолвит `ghcr.io` |
+| Код без сборки | `pwsh deploy/deploy.ps1 -NoBuild` | образ уже собран/загружен, менялись только код и конфиги |
+| Готовый образ | `pwsh deploy/deploy.ps1 -ImageFile bot-image.tar.gz` | серверный BuildKit не резолвит `ghcr.io`; образ собран где угодно |
+| Собрать и доставить | `pwsh deploy/deploy.ps1 -DeliverImage` | то же, но сборка и `docker save`/gzip — на машине разработчика |
+
+`-ImageFile`/`-DeliverImage` передают архив образа (`docker save` → gzip) по scp, на сервере
+выполняют `sudo docker load -i` и `docker compose … up -d --no-build`. Сеть BuildKit сервера
+не участвует: базовый образ `ghcr.io/astral-sh/uv:...` уже внутри архива. `-NoBuild` не
+взаимоисключается с обычным режимом по смыслу, но с `-ImageFile`/`-DeliverImage` его
+указывать нельзя (скрипт завершится ошибкой).
+
+Проверено 22.11.2026: локальная сборка → gzip 265 МБ → scp → `docker load` → `up -d
+--no-build` → `bot`/`worker` healthy, второй поллер не поднимался.
+
 ## Сервер
 
 | | |
@@ -64,8 +82,10 @@ sudo docker pull ghcr.io/astral-sh/uv:0.5-python3.13-alpine
 pwsh deploy/deploy.ps1
 ```
 
-Альтернатива — везти готовый образ (`docker save` → gzip → `scp` → `docker load` →
-`up -d --no-build`; `deploy.ps1 -NoBuild` распаковывает код и перезапускает стек без сборки).
+Альтернатива — везти готовый образ: `pwsh deploy/deploy.ps1 -DeliverImage` (локальная сборка →
+`docker save` → gzip → `scp` → `docker load` → `up -d --no-build`). Это предпочтительный
+режим, когда BuildKit сервера не резолвит `ghcr.io`: сеть сервера для сборки не нужна.
+`-NoBuild` только распаковывает код и перезапускает стек без сборки.
 Полный фикс — прописать в `/etc/resolv.conf` публичный DNS и не зависеть от роутера.
 
 ## Telegram: заблокирован провайдером
@@ -104,10 +124,59 @@ Google, Docker Hub и GitHub открываются. Поэтому на сер�
 - дамп `pg_dump` 14 восстанавливаем (в дампе нет `transaction_timeout`, баг из ROADMAP закрыт);
 - `deploy.ps1` прогнан целиком: упаковка → передача → сборка → перезапуск.
 
-## Что осталось
+## Мониторинг
 
-- [ ] вынести бэкапы PostgreSQL за пределы машины (сейчас `pgbackup` пишет в том на том же SSD,
-      ротация 7 дней / 4 недели / 6 месяцев уже настроена);
+Профиль `monitoring` выключен по умолчанию. Конфиги готовы и проверены локально:
+
+| Что | Где | Метрики |
+|---|---|---|
+| Prometheus | `configs/prometheus/prometheus.yml` | job `tgbot` (`bot:8080`), `worker` (`worker:9108`), `celery-exporter` (`celery-exporter:9808`) |
+| Grafana | `configs/grafana/celery-sync.json` | дашборд «Celery / sync»: очередь, активные задачи, успех/ошибка/повтор, `sync_batch_*`, `sync_new_grades_total`, `notifications_total` |
+| celery-exporter | compose-сервис `danihodovic/celery-exporter` | `celery_queue_length{queue_name}`, `celery_worker_tasks_active`, `celery_task_*_total` |
+
+Включение на сервере: сначала скачать образы демоном (BuildKit их не тянет), затем поднять
+профиль:
+
+```bash
+cd /srv/journal_bot
+sudo docker pull prom/prometheus:v2.43.0
+sudo docker pull grafana/grafana:8.5.22
+sudo docker pull danihodovic/celery-exporter:latest
+sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile monitoring up -d
+# targets: worker и celery-exporter должны быть UP
+curl -s http://127.0.0.1:9090/api/v1/targets   # через SSH-туннель
+```
+
+Воркер уже в сети `monitoring`; `/metrics` воркера (`:9108`) наружу не публикуется, его
+слушает только Prometheus. `celery-exporter` — в сетях `monitoring` (scrape) и `app` (Redis).
+Память: ~1.1 ГиБ на Prometheus + Grafana + exporter (лимиты в `docker-compose.prod.yml`).
+Мониторинг на проде **не включён** — это решение владельца, конфигурация к нему готова.
+
+## Бэкапы вне машины
+
+`pgbackup` пишет дампы в том на том же SSD (раз в 30 минут, глубина 7 дней / 4 недели /
+6 месяцев). Имена — в UTC. Чтобы дамп существовал вне сервера, есть
+[backup-pull.ps1](backup-pull.ps1):
+
+```bash
+pwsh deploy/backup-pull.ps1                  # последний дамп → ./backups, проверка gzip, UTC и МСК
+pwsh deploy/backup-pull.ps1 -RestoreCheck    # + восстановление в отдельную БД bot_db_restorecheck
+```
+
+Скрипт берёт `latest`-дамп через `docker cp` во временный файл на сервере, копирует по scp,
+распаковывает gzip средствами .NET (битый архив — ошибка), печатает дату в UTC и МСК и
+возраст. С `-RestoreCheck` создаёт `bot_db_restorecheck` в локальном `tgbot-postgres`,
+восстанавливает дамп и печатает число таблиц и пользователей — рабочая БД не трогается.
+Проверено 22.11.2026: `bot_db-20261122-002956.sql.gz` (03:29 МСК), 9 таблиц, 1 пользователь.
+
+Автоматического расписания pull и второго места хранения (S3/другой хост) нет: это решение
+владельца. Пока достаточно запускать скрипт перед миграциями/деплоем и раз в месяц проверять
+восстановление.
+
+## Что осталось (внешние решения)
+
 - [ ] сменить пароль `george` (для консоли) и `DEFAULT_ADMIN_PASSWORD` админки;
-- [ ] при желании включить мониторинг: `--profile monitoring` (образы Prometheus и Grafana
-      на сервер ещё не скачаны).
+- [ ] включить `--profile monitoring` на сервере (образы скачать демоном, ~1.1 ГиБ памяти) —
+      конфиги готовы, локально проверены;
+- [ ] решить, нужно ли автоматическое расписание pull-бэкапа и/или S3/второй хост;
+- [ ] прогнать `docker compose up -d --build` на чистой машине (в этой сессии не проверялось).

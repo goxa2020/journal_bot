@@ -239,6 +239,7 @@ bot/
 | `journal:{group_id}:{journal_id}` | JSON | 15 мин | разобранный журнал всей группы |
 | `journal:{group_id}:{journal_id}:sub:{hash}` | JSON | 15 мин | журнал подгруппы (`isSubGroup=true`) |
 | `journal:{group_id}:{journal_id}:empty:{user_id}` | строка | 15 мин | журнал недоступен студенту (чужая подгруппа): не запрашиваем повторно |
+| `journal:student:{edu_user_id}` | строка | 30 дней | маппинг id из `tokenauth` на id строки `journalData` (W4); пишется только при однозначном совпадении по ФИО |
 | `journal_legend:global` | JSON | 30 дней | `journalLegend` |
 | `grade_values:global` | JSON | 30 дней | справочник `journalVal` |
 | `sync:lock:{user_id}` | строка | 5 мин | защита от параллельной синхронизации одного пользователя; батч снимает его сразу после дифа (`release=True`) |
@@ -283,9 +284,15 @@ class EduTpiClient:
 
 - Один `aiohttp.ClientSession` на задачу, `timeout=60`, `raise_for_status` заменяется явной
   обработкой кодов (§10).
-- Каждый вызов журнала — с задержкой ≥ 1 с от предыдущего в рамках токена.
+- Каждый вызов журнала — с задержкой ≥ `EDU_MIN_JOURNAL_INTERVAL` (по умолчанию 1 с) от
+  предыдущего в рамках клиента; суммарный лимит — `EDU_MAX_RPS` (по умолчанию 5) через
+  Redis-счётчик `api:ratelimit:edu`. Оба значения — в `Settings` (`.env`), по умолчанию
+  совпадают с прежними константами клиента.
 - 401 — токен недействителен: сбросить `auth:token:*`, один раз переавторизоваться по
   сохранённым шифрованным данным, при повторном 401 — попросить пользователя войти заново.
+- `GET /api/tokenauth` проверяет `state`: успех — `state: 1`. `200` с другим `state`
+  (например, `-1` при отозванном токене) — не битая схема, а отозванные данные входа,
+  поэтому `EduAuthError`; `state: 1` без объекта `data` — `ParseError`.
 - Учебный год: с сентября `YYYY-(YYYY+1)`, иначе `(YYYY-1)-YYYY`; запрашивается
   **текущий семестр** (сентябрь–январь — 1, февраль–август — 2). Следующий семестр не
   запрашивается: его журналы ещё пустые. Оценки прошлых семестров остаются в БД.
@@ -297,12 +304,17 @@ class EduTpiClient:
 Кеш журнала поэтому хранит список `student_ids`:
 
 1. Ищем `journal:{group_id}:{journal_id}`; если студент есть в `student_ids` — берём оттуда.
+   Студента ищем по id из маппинга `journal:student:{edu_user_id}` (W4), затем по
+   `edu_user_id`, затем по однозначному ФИО; найденный id строки журнала запоминается на
+   30 дней. Неоднозначное ФИО (однофамильцы) не записывается и даёт `ParseError`.
 2. Иначе запрашиваем журнал токеном этого студента.
 3. Если `isSubGroup=false` — ключ `...:{journal_id}`; если `true` —
    `...:{journal_id}:sub:{md5(sorted(student_ids))[:8]}`.
 4. Сохраняем `{is_subgroup, synced_at, journal_name, student_ids, grades}`.
 
-Эффект: 1 запрос на журнал без подгрупп и по 1 на подгруппу вместо запроса на каждого студента.
+Эффект: 1 запрос на журнал без подгрупп и по 1 на подгруппу вместо запроса на каждого студента;
+повторный прогон для аккаунта с расходящимися id (`edu_user_id = -22069`) попадает в кеш по
+маппингу, а не ходит в edu-tpi заново.
 
 ### 5.3 Ограничения и деградация
 
@@ -615,6 +627,7 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | Неверный логин/пароль | `EduAuthError` | Без retry, `is_authenticated=False` | «❌ Логин или пароль неверны» |
 | Токен истёк | `EduTokenExpired` | Переавторизация по сохранённым данным | — |
 | 401 после переавторизации | `EduAuthError` | Сброс токена | «Войдите заново: /start» |
+| `GET /api/tokenauth`: `200`, `state != 1` | `EduAuthError` | Сброс токена — данные входа отозваны | «Войдите заново: /start» |
 | 5xx, таймаут | `EduUnavailableError` | Retry 3× (60/120/240 с) | «⚠️ Журнал недоступен, попробуйте позже» |
 | 429 | `EduRateLimitError` | Retry с большей паузой | — |
 | Изменилась схема ответа | `ParseError` | Без retry, лог + алерт админу | «⚠️ Не удалось разобрать журнал» |
@@ -660,9 +673,18 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | `sync_batch_duration_seconds` | Histogram | — | `bot/tasks/sync.py` |
 | `celery_tasks`, `celery_task_failures`, `celery_task_duration_seconds` | Counter/Histogram | `task`, `status` | `bot/tasks/base.py` |
 
-Уведомления и синхронизации считаются в процессе воркера: HTTP-экспорт (`/metrics` бота их
-не видит) появится вместе с celery-exporter в фазе 8. `Counter` с именем `sync_new_grades`
-экспонируется как `sync_new_grades_total` — это поведение prometheus-client.
+Метрики задач и бизнес-метрики считаются в процессе воркера. С W2 они экспортируются по
+HTTP: сервис `worker` работает в multiprocess-режиме `prometheus_client`
+(`PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus-multiproc`, tmpfs), а главный процесс воркера
+поднимает HTTP-сервер на `WORKER_METRICS_PORT` (по умолчанию `9108`, только сеть
+`monitoring`, наружу не публикуется) с `/metrics` и `/healthz`
+([bot/core/worker_metrics.py](../bot/core/worker_metrics.py)). Каталог mmap-файлов чистится
+до старта Celery, `mark_process_dead` вызывается на завершении дочернего процесса.
+Без `PROMETHEUS_MULTIPROC_DIR` (бот, тесты, локальный запуск) сервер не поднимается, и
+метрики читаются из обычного `REGISTRY`.
+
+`Counter` с именем `sync_new_grades` экспонируется как `sync_new_grades_total`,
+`sync_batch_users` — как `sync_batch_users_total` (поведение prometheus-client).
 
 Алерт админам (задача 4.4) — не метрика, а следствие метрик прогона: если пользователей в
 батче не меньше `SYNC_ALERT_MIN_USERS` и доля `failed` не меньше
@@ -685,24 +707,34 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | `active_users` | Gauge | `is_authenticated`, `watch_mode` |
 | `edu_requests_total` | Counter | `endpoint`, `status` |
 
-Ограничение: `/metrics` поднимается только в режиме webhook (`MetricsView` в
-[bot/__main__.py](../bot/__main__.py)). В polling нужен отдельный aiohttp-сервер метрик —
-задача 1.6.
+Ограничение: у бота `/metrics` поднимается в обоих режимах — в webhook его обслуживает
+aiohttp-приложение webhook, в polling — отдельный сервер из [bot/core/health.py](../bot/core/health.py).
 
-**Celery**: `celery_queue_length`, `celery_active_tasks`, `celery_task_duration_seconds`,
-`celery_tasks_total`, `celery_task_failures_total` — через `celery-prometheus-exporter`
-(контейнер `celery-exporter`), Flower — для ручного разбора. Точные имена метрик уточняются
-по выбранной версии экспортёра — их фиксируем в `configs/prometheus/` при подключении.
+**Celery**: контейнер `celery-exporter` (`danihodovic/celery-exporter`) читает брокер и
+отдаёт `celery_queue_length{queue_name}`, `celery_active_consumer_count`,
+`celery_worker_tasks_active`, `celery_task_sent_total`, `celery_task_received_total`,
+`celery_task_started_total`, `celery_task_succeeded_total`, `celery_task_failed_total`,
+`celery_task_retried_total`, `celery_task_runtime`. Prometheus job'ы `worker` (`worker:9108`)
+и `celery-exporter` (`celery-exporter:9808`) описаны в
+[configs/prometheus/prometheus.yml](../configs/prometheus/prometheus.yml); дашборд
+`Celery / sync` (`uid: celery-sync`) — в
+[configs/grafana/celery-sync.json](../configs/grafana/celery-sync.json): очередь, активные
+задачи, успех/ошибка/повтор задач, `sync_batch_users_total` по статусу,
+`sync_batch_duration_seconds` (p95/avg), `sync_new_grades_total`, `notifications_total`.
+Flower не добавляется: для ручного разбора достаточно `celery inspect`.
 
-**Логи**: loguru, `logs/telegram_bot.log` с ротацией; в воркере — `logs/worker.log`.
-Уровни: `INFO` для бизнес-событий (`sync finished user=… new=…`), `WARNING` для деградации,
-`ERROR` для постоянных ошибок, `DEBUG` — тела ответов API только при `DEBUG=true`.
+**Логи**: loguru, `logs/telegram_bot.log` с ротацией; в воркере — файл на процесс
+`logs/worker-<pid>.log` (W2.3): у prefork-пула каждый процесс пишет свой файл, поэтому
+ротация не конфликтует. Уровни: `INFO` для бизнес-событий (`sync finished user=… new=…`),
+`WARNING` для деградации, `ERROR` для постоянных ошибок, `DEBUG` — тела ответов API только
+при `DEBUG=true`.
 
 **Sentry**: в боте через loguru-интеграцию, в воркере — `CeleryIntegration`;
 `environment` из env, `release` из git sha.
 
-**Healthchecks**: `pgbouncer` и `redis` — есть; `worker` — `celery inspect ping`;
-`bot` — HTTP `/healthz` (после задачи 1.6).
+**Healthchecks**: `pgbouncer` и `redis` — есть; `worker` — HTTP `/healthz` на `:9108`
+(`timeout: 5s`, `interval: 30s`, `start_period: 60s`), Celery CLI не запускается;
+`bot` — HTTP `/healthz` на `WEBHOOK_PORT`.
 
 ---
 
@@ -720,7 +752,10 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
 | A8 | Fail-fast конфигурация | Дефолты на всё | Случайный `ENCRYPTION_KEY` и пустой `BOT_TOKEN` должны падать на старте, а не через неделю |
 | A9 | `acks_late` + идемпотентность задач | `acks_early` | Не терять задачи при падении воркера; цена — возможно повторное выполнение |
 | A10 | Ночные уведомления копятся в Redis до утра | Задача с `eta` на каждую оценку | Один пользователь — одно сообщение утром, меньше шума и вызовов API |
-| A11 | Админка отдельными таблицами (`admin`, `role`) вне миграций | Единая схема | Меньше связности; цена — `autogenerate` их не видит (документировано) |
+| A11 | Админка отдельными таблицами (`admin`, `role`) вне миграций | Единая схема | Меньше связности; `autogenerate` их не видит, поэтому в `migrations/env.py` они исключены через `include_object` — `alembic check` остаётся чистым |
+| A12 | Метрики воркера — `prometheus_client` multiprocess + `celery-exporter`, без Flower | Flower, отдельный экспортёр, только celery-exporter | Бизнес-метрики (`sync_*`, `notifications_total`) живут в процессах воркера, celery-exporter их не видит; multiprocess отдаёт их по HTTP без нового сервиса, celery-exporter добавляет состояние Celery |
+| A13 | Маппинг `edu_user_id` → id строки журнала в Redis (`journal:student:*`, 30 дней) | Колонка `users.journal_user_id` + миграция; сопоставление только по ФИО | Не меняет схему БД и работает при расхождении id; пишется только при однозначном ФИО, однофамильцы не угадываются |
+| A14 | Лимиты edu-tpi — в `Settings` (`EDU_MIN_JOURNAL_INTERVAL`, `EDU_MAX_RPS`) | Константы в клиенте | Значения по умолчанию не меняются, но подбираются под нагрузку без правки кода (фаза 8) |
 
 ---
 
@@ -760,5 +795,10 @@ beat час → cleanup_expired_watch_mode → сброс истёкших, SREM
    после дифа, вынесенный `GradeSyncService.apply_payload`, оппортунистическая синхронизация
    за флагом `SYNC_OPPORTUNISTIC`, метрики `sync_batch_users`/`sync_batch_duration_seconds`
    и алерт админам при массовых сбоях.
+6. **Технический долг W1–W5 — сделано (22.11.2026).** `/metrics` и `/healthz` воркера
+   (multiprocess), celery-exporter и дашборд, дешёвый healthcheck, файл лога на pid,
+   `alembic check` без дрейфа, маппинг `journal:student:*`, лимиты edu-tpi в настройках,
+   `wcwidth` для таблиц, доставка образа и pull-бэкапы. Открытые внешние ограничения —
+   ROADMAP, «Замечено вне фазы 5».
 
 После этого код соответствует этой схеме, и документ можно перевести в статус «реализовано».

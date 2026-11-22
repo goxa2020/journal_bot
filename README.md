@@ -31,7 +31,9 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
 - ✅ хранение учётных данных в зашифрованном виде (Fernet), токен в Redis с переавторизацией
   по сохранённым данным;
 - ✅ синхронизация оценок из журнала: журналы обоих семестров, групповой кеш и подгруппы,
-  диф по `(дата, пара)`, журналы и оценки в PostgreSQL, история в `sync_logs`;
+  диф по `(дата, пара)`, журналы и оценки в PostgreSQL, история в `sync_logs`; при расхождении
+  id из `tokenauth` и `journalData` студент находится по однозначному ФИО, id запоминается в
+  Redis (`journal:student:*`) и дальше используется кеш;
 - ✅ экран `/grades`: все журналы с непустыми записями (оценки и `Н/У/Б/О`), сортировка
   по последней записи, пометки «Л»/«П», таблица до 50 символов, средний балл, пустые состояния;
 - ✅ ручное обновление: `/sync` и кнопка «Обновить» ставят задачу Celery, по завершении
@@ -54,19 +56,24 @@ Journal Bot даёт студенту в Telegram то, ради чего ина
   `worker` и `beat` в compose, базовый класс задачи (повторы, lock на пользователя, логи,
   метрики), задачи `sync_user_manual`, `sync_user_after_login`, `send_grade_notification`,
   `send_night_batch`, бизнес-метрики `notifications_total` и `sync_new_grades`;
-- ✅ `/healthz` и `/metrics` у бота в обоих режимах (polling и webhook), healthcheck контейнера;
+- ✅ `/healthz` и `/metrics` у бота в обоих режимах (polling и webhook), у воркера —
+  `/metrics` и `/healthz` на `:9108` (метрики задач и синхронизаций, multiprocess
+  prometheus-client), дешёвый healthcheck контейнера воркера;
+- ✅ наблюдаемость: Prometheus scrape'ит бота, воркера и celery-exporter; дашборд Grafana
+  «Celery / sync» (очередь, активные задачи, ошибки, `sync_batch_*`, `notifications_total`);
 - ✅ админ-панель Flask-Admin: вход по ролям, список пользователей;
-- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 249 тестов,
-  job «Run tests» в CI;
+- ✅ тесты: pytest + pytest-asyncio, `fakeredis`, HTTP-стаб и фикстуры edu-tpi, 268 тестов,
+  jobs «Run tests» и «Run pre-commit» в CI;
 - ✅ Docker Compose: бот, воркер, beat, админка, PostgreSQL, PgBouncer, Redis, миграции, бэкапы,
-  Prometheus, Grafana.
+  Prometheus, Grafana, celery-exporter.
 
 ### Что в плане
 
 - ⬜ режим ожидания оценок (обновление выбранных пользователей каждые 5 минут);
 - ⬜ экран `/stats`;
 - ⬜ статистика: средний балл, посещаемость, динамика;
-- ⬜ экспорт в Excel, месячный дайджест, расширенная админка, Flower и экспорт метрик Celery.
+- ⬜ экспорт в Excel, месячный дайджест, расширенная админка; Flower — по желанию для ручного
+  разбора (метрики Celery уже идут через celery-exporter).
 
 Полный план с оценками и критериями приёмки — [docs/ROADMAP.md](docs/ROADMAP.md).
 

@@ -152,6 +152,13 @@ compose: `6432` — pgbouncer, `6433` — postgres, `6380` — redis. Host-по�
 переменные (`PGBOUNCER_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`), потому что на машине
 может быть свой PostgreSQL на 5432/5433.
 
+В justfile стоит `set dotenv-load := false`: раньше `set dotenv-load` + `set export` клали
+переменные `.env` в окружение рецепта, а pydantic-settings ставит окружение выше env-файла —
+`just dev` шёл на `pgbouncer`/`redis` вместо `127.0.0.1:6432`/`6380`. Теперь `dev` и
+`dev-worker` задают `ENV_FILE` явно, а compose-рецепты не затронуты: `docker compose` сам
+читает `.env` из корня проекта. Проверить, к каким хостам подключится `just dev`, можно без
+запуска бота:
+
 Минимальный `.env.local` (копия `.env` с правками, файл не в git):
 
 ```dotenv
@@ -161,6 +168,10 @@ REDIS_HOST=127.0.0.1
 REDIS_PORT=6380
 TELEGRAM_PROXY=http://127.0.0.1:10809
 DEBUG=False
+```
+
+```bash
+just dev-check      # DB 127.0.0.1:6432, REDIS 127.0.0.1:6380
 ```
 
 `just dev` — это `watchfiles` + `python -m bot`: процесс перезапускается при сохранении файла
@@ -186,7 +197,9 @@ DEBUG=False
 | `just logs bot` | логи сервиса |
 | `just compose-exec bot <cmd>` | выполнить команду в контейнере |
 | `just dev` | локальный запуск с автоперезапуском (`.env.local`, `watchfiles`) |
+| `just dev-check` | к каким БД/Redis подключится `just dev` (без запуска бота) |
 | `just dev-worker` | локальный Celery-воркер без Docker (`.env.local`, `--pool=solo` на Windows) |
+| `just test` | скомпилировать локали и запустить `pytest -q` |
 | `just worker` / `just beat` | поднять Celery worker / beat в Docker |
 | `just worker-logs` | логи `worker` и `beat` |
 | `just celery-ping` | `celery inspect ping` из контейнера воркера (должен ответить `pong`) |
@@ -248,7 +261,11 @@ docker compose exec bot alembic downgrade -1
 - `alembic/env.py` берёт URL из `settings.database_url` (asyncpg), `NullPool` — можно гонять
   параллельно с ботом;
 - таблицы админки (`admin`, `role`, `roles_admins`) создаются `db.create_all()` и в миграции
-  не попадают — перед `--autogenerate` убедитесь, что они не «предлагаются к удалению»;
+  не попадают; в `migrations/env.py` они исключены через `include_object`, поэтому
+  `alembic check` не предлагает их удалить. `journals.id` — только PK (`unique=True` снят):
+  уникальность первичного ключа отдельным ограничением не нужна;
+- `alembic check` должен отвечать «No new upgrade operations detected»; проверяйте его после
+  изменения моделей и перед деплоем;
 - `downgrade` обязателен: миграция без рабочего отката не принимается;
 - на непустой таблице новый `NOT NULL` столбец добавляется с `server_default`, иначе деплой
   падает (так было с `users.is_authenticated`).
@@ -267,8 +284,8 @@ just babel-compile    # .po → .mo
 1. В коде — `_("ключ")` или `n_("ключ")`.
 2. `just babel` — строка попадает в `.pot` и в `.po` с пустым `msgstr`.
 3. Заполнить `msgstr` в `ru` и `en`.
-4. `just babel-compile` и закоммитить `.po` — `.mo` в git не попадает (`.gitignore`), его
-   компилирует Dockerfile и CI отдельным шагом.
+4. `just babel-compile` — для ручного запуска бота; `pytest` компилирует `.mo` сам
+   (см. §7). Закоммитить только `.po` — `.mo` в git не попадает (`.gitignore`).
 5. Проверить в Telegram оба языка (язык берётся из `users.language_code`, по умолчанию `ru`).
 
 Новая локаль: `pybabel init -i bot/locales/messages.pot -d bot/locales -D messages -l <код>`,
@@ -296,11 +313,19 @@ tests/
 ошибка авторизации участника, идемпотентность, занятый lock), задача батча
 (`tests/unit/test_sync_batch.py`: батч-лок, лимиты, метрики через `prometheus_client.REGISTRY`,
 алерт админам) и расписание/маршрут в `tests/integration/test_celery_smoke.py`.
-Всего 249 тестов.
+Технический долг (W1–W5) добавил тесты маппинга id журнала (`test_journal_cache.py`,
+`test_group_sync.py`), `/metrics` и `/healthz` воркера и имени файла лога
+(`test_worker_metrics.py`), проверку `state` в `get_user_info`, повреждённых credentials,
+display-width таблиц (эмодзи/CJK) и лимитов edu-tpi из настроек. Всего **268 тестов**.
+
+Локали: `.mo` не в git, а тесты проверяют русские тексты. `tests/conftest.py` на импорте
+компилирует `.po` → `.mo`, если `.mo` нет или он старше `.po`, поэтому на чистом клоне
+`pytest` работает без ручного `just babel-compile` (и `just test` делает то же явно).
+Компиляция идёт до импорта тестовых модулей: fixture (даже session-scoped) выполнилась бы
+уже после collection.
 
 ```bash
-just babel-compile                  # .mo не в git, а тесты проверяют русские тексты
-uv run pytest -q                    # всё
+uv run pytest -q                    # всё (локали компилируются автоматически)
 uv run pytest tests/unit -q         # быстро
 uv run pytest -k notification -vv   # один срез
 ```
@@ -308,13 +333,15 @@ uv run pytest -k notification -vv   # один срез
 Правила:
 
 - сеть в тестах запрещена: HTTP-слой edu-tpi подменяется стабом `aiohttp.ClientSession`
-  (в `tests/unit/test_auth_service.py`), Redis — `fakeredis`, БД — заглушкой сессии.
-  `respx` установлен для будущих httpx-клиентов: с `aiohttp` он не работает;
+  (`tests/fakes.py`), Redis — `fakeredis`, БД — заглушкой сессии. `respx` удалён: с `aiohttp`
+  он не работает, а отдельный задел под httpx не нужен;
 - в фикстурах API **нет реальных ФИО и оценок** — только обезличенные фрагменты;
 - `tests/conftest.py` выставляет `BOT_TOKEN` и тестовый `ENCRYPTION_KEY` до импорта `bot.*`;
   это тестовые значения, не секреты;
 - парсер и диф оценок тестируются на каждое изменение — это самое хрупкое место;
-- CI (job «Run tests») ставит зависимости, компилирует локали и запускает `pytest -q`.
+- CI (job «Run tests») ставит зависимости, компилирует локали и запускает `pytest -q`;
+  отдельный job «Run pre-commit» гоняет `pre-commit run --all-files`, поэтому проверка
+  не зависит от локальных git-хуков.
 
 ## 8. Windows
 
@@ -347,14 +374,15 @@ uv run pytest -k notification -vv   # один срез
 | `409 Conflict` в логах Telegram | два поллера с одним токеном (локальный и контейнерный) | остановить один: `docker compose stop bot` |
 | Уведомления не приходят, в логах `notification blocked` | пользователь заблокировал бота: `notification_enabled=False` | разблокировать бота и включить уведомления в `/settings` |
 | Ночью сообщение пришло сразу | выключено «копить ночью» или это ручная синхронизация | `/settings` → «Копить ночью: вкл»; ручная синхронизация отвечает сразу всегда |
-| `Error 11001 connecting to redis:6379` у воркера | воркер запущен локально, но читает `.env` с docker-хостами | локально — `just dev-worker` (`ENV_FILE=.env.local`); вручную: `ENV_FILE=.env.local uv run celery -A bot.celery_app worker ...` |
-| Батч пишет `sync_logs` с `journals=1` или `errors=unprocessed` | участник не сопоставлен с журналом | проверить `users.edu_user_id` и `full_name`: `userID` из `tokenauth` может не совпадать с `journalData.id`, сопоставление идёт по id, затем по ФИО |
+| `Error 11001 connecting to redis:6379` у воркера | воркер запущен локально, но читает `.env` с docker-хостами | локально — `just dev-worker` (`ENV_FILE=.env.local`); вручную: `$env:ENV_FILE='.env.local'` и тот же запуск |
+| Батч пишет `sync_logs` с `journals=1` или `errors=unprocessed` | участник не сопоставлен с журналом | проверить `users.edu_user_id` и `full_name`: `userID` из `tokenauth` может не совпадать с `journalData.id`; маппинг `journal:student:{id}` заполняется сам при однозначном ФИО (W4), смотреть `journal:student:*` в Redis |
+| `worker unhealthy`, `/healthz` не отвечает | HTTP-сервер метрик не поднялся | внутри контейнера: `wget -qO- http://127.0.0.1:9108/healthz`; проверить `PROMETHEUS_MULTIPROC_DIR` и каталог, `docker compose logs worker` (строка `worker metrics on ...`) |
 | `/healthz` не отвечает, `curl` висит | бот поднят в webhook-режиме или порт занят | в polling `/healthz` поднимает `bot/core/health.py` на `WEBHOOK_HOST:WEBHOOK_PORT`; проверить `docker compose port bot ${WEBHOOK_PORT}` и логи `health server` |
 | Порт занят | локальный сервис на 5433/6379/8080/3000 | изменить в `.env` или остановить локальный сервис |
 
-Логи: `logs/telegram_bot.log` в контейнере бота (в проде — `docker compose logs`), у воркера
-будет `logs/worker.log`. В контейнере логи смотрите через `just logs`, файлы — только при
-локальном запуске.
+Логи: `logs/telegram_bot.log` в контейнере бота (в проде — `docker compose logs`), у воркера —
+`logs/worker-<pid>.log` на каждый процесс (см. §10). В контейнере логи смотрите через
+`just logs`, файлы — только при локальном запуске.
 
 ## 10. Отладка фоновых задач
 
@@ -442,11 +470,10 @@ Smoke-задача `bot.tasks.service.ping` не пишет в БД и не хо
 just dev-worker        # ENV_FILE=.env.local, --pool=solo (Windows), concurrency 1
 ```
 
-`just dev-worker` дополнительно убирает из окружения переменные, которые `just` экспортировал
-из `.env`: `set dotenv-load` + `set export` в justfile перекрывают `.env.local` (pydantic-settings
-ставит переменные окружения выше env-файла), и воркер пошёл бы на `redis:6379` вместо
-опубликованного `127.0.0.1:6380`. С `just dev` (бот) та же ловушка — см. ROADMAP, «замечено
-вне фазы 1».
+`just dev-worker` дополнительно ничего не убирает из окружения: в justfile
+`set dotenv-load := false`, поэтому `.env` не экспортируется и не перекрывает `.env.local`
+(раньше `set dotenv-load` + `set export` делали ровно это, и воркер шёл на `redis:6379`
+вместо опубликованного `127.0.0.1:6380`). Та же ловушка была у `just dev` — закрыта в W1.1.
 
 Отладка без брокера — `CELERY_TASK_ALWAYS_EAGER=True`: задача выполняется в вызывающем процессе,
 `.delay()` не пишет в Redis. Так работают smoke-тесты (`tests/integration/test_celery_smoke.py`).
@@ -462,10 +489,24 @@ just dev-worker        # ENV_FILE=.env.local, --pool=solo (Windows), concurrency
 | `inspect ping` не отвечает | воркер не подключился к брокеру | `docker compose logs worker`: адрес Redis; подключение повторяется автоматически |
 | задача «есть», но результата нет | смотреть `result_expires` (24 ч) | результат в Redis живёт сутки, тело задачи — в логе воркера |
 
-Логи: `docker compose logs` (stdout) и файл `/usr/src/app/logs/worker.log` в контейнере
-(ротация 100 КБ, как у бота; посмотреть — `docker compose exec worker tail -n 100 logs/worker.log`).
-Flower и celery-exporter появятся в фазе 8: до этого метрики задач (`celery_tasks_total`,
-`celery_task_failures_total`, `celery_task_duration_seconds`) живут только в процессе воркера.
+Логи: `docker compose logs` (stdout) и файл `/usr/src/app/logs/worker-<pid>.log` в контейнере
+(ротация 100 КБ, свой файл на каждый процесс prefork-пула; посмотреть —
+`docker compose exec worker sh -c 'ls logs && tail -n 100 logs/worker-*.log'`).
+
+Метрики воркера и healthz (W2):
+
+```bash
+docker compose exec worker wget -qO- http://127.0.0.1:9108/healthz
+docker compose exec worker sh -c 'wget -qO- http://127.0.0.1:9108/metrics | grep -E "^(sync_|notifications_|celery_)"'
+# Prometheus (локально): targets worker и celery-exporter должны быть UP
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job, health}'
+# Grafana: дашборд «Celery / sync» (uid celery-sync)
+```
+
+Метрики пишутся в multiprocess-каталог (`PROMETHEUS_MULTIPROC_DIR`, tmpfs в compose);
+главный процесс воркера отдаёт их по HTTP. `celery-exporter` читает брокер и добавляет
+`celery_queue_length{queue_name}`, `celery_worker_tasks_active`, `celery_task_*_total`.
+Healthcheck воркера — HTTP `/healthz` (timeout 5 с), а не `celery inspect ping`.
 
 ## 11. Структура проекта
 
@@ -516,7 +557,18 @@ docker compose exec pgbackup /restore.sh <file>
 ```
 
 Проверка восстановления — раз в месяц на отдельной БД: бэкап без проверки восстановления
-бэкапом не считается.
+бэкапом не считается. На проде есть `deploy/backup-pull.ps1` (W5.2): забирает последний дамп
+на машину разработчика, проверяет gzip, печатает время в UTC и МСК и с `-RestoreCheck`
+восстанавливает в отдельную БД `bot_db_restorecheck` локального postgres-контейнера.
+
+```bash
+pwsh deploy/backup-pull.ps1                 # скачать и проверить gzip
+pwsh deploy/backup-pull.ps1 -RestoreCheck   # + восстановление на отдельной БД
+```
+
+Имена дампов — в UTC (`bot_db-20261122-002956.sql.gz` = 03:29 МСК), поэтому «свежесть» по
+`ls` пересчитывается; скрипт делает это сам. Подробности — [deploy/README.md](../deploy/README.md),
+«Бэкапы вне машины».
 
 > **Легаси:** `scripts/postgres/backup` и `restore` рассчитаны на образ с `pg_dump` и базу
 > с именем `app`; в текущем контейнере бота (alpine, без postgresql-client) они не работают.
@@ -528,7 +580,7 @@ docker compose exec pgbackup /restore.sh <file>
 just format      # ruff + format
 just mypy        # типы
 just check       # финальная проверка
-uv run pytest -q
+just test        # pytest (локали компилируются)
 ```
 
 И пройтись по Definition of Done в [ROADMAP.md](ROADMAP.md#12-порядок-работы-и-definition-of-done).
