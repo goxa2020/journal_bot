@@ -140,3 +140,6 @@ dev/
 .env.local
 .pre-commit-cache/
 .ruff_cache/
+
+# Локальные копии прод-дампов (deploy/backup-pull.ps1): ПДн, не в git
+backups/
