@@ -71,7 +71,7 @@ def install_session(
     monkeypatch: pytest.MonkeyPatch,
     routes: dict[tuple[str, str], FakeResponse | Exception],
 ) -> FakeSession:
-    """Подменить HTTP-слой edu-tpi; respx не умеет aiohttp, поэтому стаб свой."""
+    """Подменить HTTP-слой edu-tpi: свой стаб вместо сети и вместо respx (он не умеет aiohttp)."""
     session = FakeSession(routes)
     monkeypatch.setattr(
         "bot.integrations.edu_tpi.aiohttp.ClientSession",

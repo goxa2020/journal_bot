@@ -9,6 +9,7 @@ import html
 from typing import TYPE_CHECKING, Protocol
 
 from aiogram.utils.i18n import gettext as _
+from wcwidth import wcswidth
 
 from bot.utils.misc import n_
 
@@ -51,18 +52,44 @@ def format_last_grade(value: str, journal_name: str, grade_date: date) -> str:
     return _("last_grade").format(value, journal_name, format_date(grade_date))
 
 
+def display_width(value: str) -> int:
+    """Ширина строки в моноширинных ячейках, а не в code points.
+
+    Telegram считает `<pre>` посимвольно в моноширинном шрифте: эмодзи занимают две
+    ячейки, CJK — две, комбинирующие знаки — ноль. `len()` на таких строках сдвигает
+    колонки, поэтому ширина считается через `wcwidth`. Для управляющих символов
+    `wcswidth` возвращает `-1` — тогда откатываемся на длину строки.
+    """
+    width = wcswidth(value)
+    return len(value) if width < 0 else width
+
+
 def _truncate(value: str, width: int) -> str:
     text = value.replace("\n", " ").strip()
     if width <= 0:
         return ""
-    if len(text) > width:
-        text = text[: width - 1] + ELLIPSIS
-    return text
+    if display_width(text) <= width:
+        return text
+    if width == 1:
+        return ELLIPSIS
+    # Оставляем место под многоточие и режем по ячейкам, а не по символам.
+    limit = width - display_width(ELLIPSIS)
+    taken = 0
+    cut = 0
+    for index, char in enumerate(text):
+        char_width = max(display_width(char), 0)
+        if taken + char_width > limit:
+            break
+        taken += char_width
+        cut = index + 1
+    return text[:cut] + ELLIPSIS
 
 
 def _fit(value: str, width: int) -> str:
-    """Обрезать строку до ширины колонки и дополнить пробелами."""
-    return _truncate(value, width).ljust(width)
+    """Обрезать строку до ширины колонки и дополнить пробелами по ячейкам."""
+    text = _truncate(value, width)
+    padding = width - display_width(text)
+    return text + " " * max(padding, 0)
 
 
 def _journal_type_suffix(journal_type: str, translate: Translator | None = None) -> str:
@@ -141,14 +168,13 @@ def format_journals_overview(journals: Sequence[JournalSummary]) -> str:
         name = journal_display_name(journal.name, journal.type)
         average = f"{journal.average:.2f}" if journal.average is not None else None
         line = _overview_line(name, average)
-        if len(line) > TABLE_WIDTH:
+        if display_width(line) > TABLE_WIDTH:
             # Обрезаем само название, а пометку вида («Л»/«П») сохраняем.
-            excess = len(line) - TABLE_WIDTH
-            base = _truncate(journal.name, max(1, len(journal.name) - excess))
+            excess = display_width(line) - TABLE_WIDTH
+            base = _truncate(journal.name, max(1, display_width(journal.name) - excess))
             name = journal_display_name(base, journal.type)
             line = _overview_line(name, average)
         lines.append(line)
-    return "\n".join(lines)
     return "\n".join(lines)
 
 

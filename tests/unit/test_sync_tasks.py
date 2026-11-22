@@ -313,3 +313,25 @@ def test_after_login_never_enables_opportunistic(
     sync_user_after_login.apply(args=(1,)).get()
 
     assert service.init_kwargs[-1]["opportunistic"] is False
+
+
+def test_edu_limits_defaults_match_client_constants() -> None:
+    """W1.14: значения по умолчанию не меняются — риск бана edu-tpi."""
+    from bot.core.config import Settings  # noqa: PLC0415 — проверяются именно дефолты модели
+    from bot.integrations.edu_tpi import MAX_REQUESTS_PER_SECOND, MIN_JOURNAL_INTERVAL  # noqa: PLC0415
+
+    assert Settings.model_fields["EDU_MIN_JOURNAL_INTERVAL"].default == MIN_JOURNAL_INTERVAL
+    assert Settings.model_fields["EDU_MAX_RPS"].default == MAX_REQUESTS_PER_SECOND
+
+
+def test_edu_client_uses_settings_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W1.14: лимиты клиента берутся из настроек, а не из констант."""
+    from bot.tasks.sync import _edu_client  # noqa: PLC0415 — проверяется фабрика задачи
+
+    monkeypatch.setattr(settings, "EDU_MIN_JOURNAL_INTERVAL", 2.5)
+    monkeypatch.setattr(settings, "EDU_MAX_RPS", 3)
+
+    client = _edu_client(None)
+
+    assert client._min_journal_interval == 2.5  # noqa: SLF001 — значение задаётся только в конструкторе
+    assert client._max_rps == 3  # noqa: SLF001

@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from contextlib import AbstractAsyncContextManager
 
+    from redis.asyncio import Redis
     from sqlalchemy.ext.asyncio import AsyncSession
 
 USER_MESSAGES = {
@@ -70,6 +71,20 @@ USER_SYNC_LOCK_TTL = 300
 def _user_lock(user_id: int) -> AbstractAsyncContextManager[bool]:
     """Per-user lock для батча и оппортунистической части; снимается после дифа."""
     return task_lock(build_key("sync:lock", user_id), ttl=USER_SYNC_LOCK_TTL, release=True)
+
+
+def _edu_client(redis: Redis | None) -> EduTpiClient:
+    """Клиент edu-tpi с лимитами из настроек (W1.14).
+
+    Значения по умолчанию совпадают с константами клиента (1 req/s на журнал,
+    5 req/s суммарно), поэтому поведение не меняется, но лимиты можно настроить
+    через `.env` без правки кода.
+    """
+    return EduTpiClient(
+        redis=redis,
+        min_journal_interval=settings.EDU_MIN_JOURNAL_INTERVAL,
+        max_requests_per_second=settings.EDU_MAX_RPS,
+    )
 
 
 def _schedule_notification(user_id: int, notices: Sequence[NewGradeNotice]) -> None:
@@ -105,7 +120,7 @@ async def _run_sync(
 
         async with task_redis() as redis, task_session() as session:
             language = await _user_language(session, user_id)
-            async with EduTpiClient(redis=redis) as client:
+            async with _edu_client(redis) as client:
                 tokens = TokenService(redis=redis, session=session, user_id=user_id, client=client)
                 cache = JournalCache(redis, client)
                 service = GradeSyncService(
@@ -304,7 +319,7 @@ async def _run_batch() -> dict[str, Any]:
             }
 
         async with task_redis() as redis, task_session() as session:
-            async with EduTpiClient(redis=redis) as client:
+            async with _edu_client(redis) as client:
                 service = GroupSyncService(
                     session=session,
                     client=client,

@@ -126,6 +126,17 @@ class Settings(BotSettings, DBSettings, CacheSettings, CelerySettings):
     SYNC_ALERT_FAILURE_RATIO: float = 0.2
     SYNC_ALERT_MIN_USERS: int = 5
 
+    # Лимиты edu-tpi (W1.14): пауза между запросами деталей журнала в рамках клиента
+    # и суммарный лимит запросов в секунду (Redis-счётчик). Раньше были константами
+    # `EduTpiClient`; значения по умолчанию не меняем — снижение лимита риск бана,
+    # повышение тоже. Менять только осознанно и в `.env`.
+    EDU_MIN_JOURNAL_INTERVAL: float = 1.0
+    EDU_MAX_RPS: int = 5
+
+    # Порт HTTP-сервера метрик/healthz воркера (W2). Порт слушается только внутри
+    # docker-сети `monitoring`, наружу не публикуется.
+    WORKER_METRICS_PORT: int = 9108
+
     # Ключ шифрования учётных данных edu-tpi. Обязателен: случайный ключ ломает
     # расшифровку паролей после рестарта, поэтому дефолта у поля нет.
     ENCRYPTION_KEY: str

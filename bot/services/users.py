@@ -3,6 +3,7 @@ import datetime as dt
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from loguru import logger
 from sqlalchemy import Select, func, select, update
 
 from bot.cache.redis import build_key, cached, clear_cache
@@ -247,8 +248,13 @@ async def load_edu_credentials(session: AsyncSession, user_id: int) -> tuple[str
     if not row or not row[0] or not row[1]:
         return None, None
 
-    # decrypt() логирует warning и возвращает None, если ключ сменился или токен повреждён
-    return decrypt(row[0]), decrypt(row[1])
+    # decrypt() логирует warning и возвращает None, если ключ сменился или токен повреждён.
+    # Здесь добавляем user_id и сам факт: без значений и без токена — в логах только id.
+    login = decrypt(row[0])
+    password = decrypt(row[1])
+    if login is None or password is None:
+        logger.warning("edu credentials damaged user_id={} — требуется повторный вход", user_id)
+    return login, password
 
 
 async def set_edu_credentials(session: AsyncSession, user_id: int, username: str, password: str) -> None:

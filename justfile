@@ -1,5 +1,10 @@
 set shell := ["powershell", "-c"]
-set dotenv-load
+# .env не экспортируется в окружение рецептов: pydantic-settings ставит переменные
+# окружения выше значений из ENV_FILE, поэтому `just dev`/`dev-worker` ходили бы на
+# docker-хосты (`pgbouncer`/`redis`), а не на 127.0.0.1:6432/6380 из `.env.local`.
+# `docker compose` сам читает `.env` из корня проекта, поэтому compose-рецептам это
+# не нужно. Новый рецепт, которому нужен `.env`, должен читать его явно.
+set dotenv-load := false
 set export
 
 # Variables
@@ -20,6 +25,15 @@ watch:
 # Быстрый локальный запуск с автоперезапуском (нужен .env.local, см. docs/DEVELOPMENT.md)
 dev:
     $env:ENV_FILE = ".env.local"; uv run watchfiles --filter python "python -m bot" bot
+
+# К каким БД/Redis подключится `just dev` (без запуска бота; проверка W1.1)
+dev-check:
+    $env:ENV_FILE = ".env.local"; uv run python -c "from bot.core.config import settings; print(f'DB {settings.DB_HOST}:{settings.DB_PORT}'); print(f'REDIS {settings.REDIS_HOST}:{settings.REDIS_PORT}')"
+
+# Тесты; локали компилируются, если .mo нет или он старше .po
+test:
+    uv run pybabel compile -d bot/locales
+    uv run pytest -q
 
 # Run docker compose
 compose-up:
@@ -72,12 +86,11 @@ celery-ping:
     docker compose exec worker celery -A bot.celery_app inspect ping
 
 # Локальный worker без Docker (нужен .env.local, см. docs/DEVELOPMENT.md §10).
-# just экспортирует переменные .env (set dotenv-load + set export), а pydantic-settings
-# ставит переменные окружения выше .env.local — поэтому убираем их, иначе worker пойдёт
-# на redis:6379 вместо опубликованного 127.0.0.1:6380.
+# `set dotenv-load := false` в шапке justfile: .env больше не экспортируется и не
+# перекрывает .env.local, поэтому убирать переменные вручную не нужно.
 # --pool=solo: prefork-пул Celery на Windows не работает.
 dev-worker:
-    $env:ENV_FILE = ".env.local"; Select-String -Path .env -Pattern '^([A-Za-z_][A-Za-z0-9_]*)=' | ForEach-Object { Remove-Item "Env:$($_.Matches[0].Groups[1].Value)" -ErrorAction SilentlyContinue }; uv run celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c 1 --pool=solo
+    $env:ENV_FILE = ".env.local"; uv run celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c 1 --pool=solo
 
 # --- MIGRATIONS ---
 

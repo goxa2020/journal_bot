@@ -349,8 +349,17 @@ class EduTpiClient:
         )
 
     async def get_user_info(self, token: str) -> EduUser:
-        """`GET /api/tokenauth`: кто я и в какой группе (docs/API.md §4)."""
+        """`GET /api/tokenauth`: кто я и в какой группе (docs/API.md §4).
+
+        Успех — `state: 1`. Если `state` другой (например, `-1` — токен отозван),
+        API отвечает `200` с `data: null`: это не «битая схема», а недействительные
+        данные входа, поэтому `EduAuthError` (как 401/403), а не `ParseError`.
+        """
         payload = await self._request("GET", AUTH_URL, token=token)
+        state = payload.get("state")
+        if state != 1:
+            message = f"edu-tpi отклонил токен: state={state!r}"
+            raise EduAuthError(message)
         data = _data(payload)
         raw_user = data.get("user")
         if not isinstance(raw_user, dict):

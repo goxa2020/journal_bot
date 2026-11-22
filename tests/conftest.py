@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fakeredis.aioredis
 import pytest
+from babel.messages.mofile import write_mo
+from babel.messages.pofile import read_po
 from loguru import logger
 
 if TYPE_CHECKING:
@@ -29,6 +32,31 @@ os.environ.setdefault("AMPLITUDE_API_KEY", "")
 os.environ.setdefault("POSTHOG_API_KEY", "")
 
 TEST_ENCRYPTION_KEY = os.environ["ENCRYPTION_KEY"]
+
+LOCALES_DIR = Path(__file__).resolve().parent.parent / "bot" / "locales"
+
+
+def _compile_stale_locales() -> None:
+    """Скомпилировать `.po` → `.mo`, если `.mo` нет или он старше перевода.
+
+    `.mo` не в git, а тесты проверяют готовые русские тексты. Без этого шага на
+    чистом клоне приходилось вручную звать `just babel-compile`. Компиляция идёт
+    на импорте `conftest.py`: он загружается раньше тестовых модулей, а значит
+    раньше первого импорта `bot.*` и первого чтения каталога gettext. Фикстура
+    (даже session-scoped) к этому моменту уже опоздала бы: тестовые модули
+    импортируются на этапе collection.
+    """
+    for po_path in sorted(LOCALES_DIR.glob("*/LC_MESSAGES/messages.po")):
+        mo_path = po_path.with_suffix(".mo")
+        if mo_path.exists() and mo_path.stat().st_mtime >= po_path.stat().st_mtime:
+            continue
+        with po_path.open("rb") as po_file:
+            catalog = read_po(po_file)
+        with mo_path.open("wb") as mo_file:
+            write_mo(mo_file, catalog)
+
+
+_compile_stale_locales()
 
 
 @pytest.fixture

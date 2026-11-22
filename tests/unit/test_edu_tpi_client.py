@@ -134,6 +134,47 @@ async def test_protected_403_raises_auth_error(monkeypatch: pytest.MonkeyPatch) 
             await client.get_user_info("token")
 
 
+async def test_user_info_parses_successful_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Обычный `state: 1` не задет проверкой состояния (W1.12)."""
+    install_session(monkeypatch, {("GET", AUTH_URL): FakeResponse(payload=load_fixture("user_info.json"))})
+
+    async with EduTpiClient() as client:
+        user = await client.get_user_info("token")
+
+    assert user.user_id == 1001
+    assert user.group_id == 3273
+    assert user.fio == "Студентов С.С."
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"state": -1, "data": None},
+        {"state": -1, "data": {"user": {"userID": 1001}}},
+        {"state": -2, "data": None},
+    ],
+)
+async def test_user_info_rejected_state_raises_auth_error(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, object],
+) -> None:
+    """`200` с `state != 1` — отозванные данные входа, а не битая схема (W1.12)."""
+    install_session(monkeypatch, {("GET", AUTH_URL): FakeResponse(payload=payload)})
+
+    async with EduTpiClient() as client:
+        with pytest.raises(EduAuthError):
+            await client.get_user_info("token")
+
+
+async def test_user_info_state_one_without_data_raises_parse_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`state: 1` без `data` — уже неверная схема ответа."""
+    install_session(monkeypatch, {("GET", AUTH_URL): FakeResponse(payload={"state": 1})})
+
+    async with EduTpiClient() as client:
+        with pytest.raises(ParseError):
+            await client.get_user_info("token")
+
+
 async def test_rate_limit_carries_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     install_session(
         monkeypatch,
