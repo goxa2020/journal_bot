@@ -28,6 +28,24 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 target_metadata = Base.metadata
 
+# Таблицы админки (Flask-Admin/Flask-Security) создаются `db.create_all()` при старте
+# админки, а не миграциями — это документированный компромисс (ARCHITECTURE §12, A11).
+# Без исключения autogenerate/`alembic check` предлагает их удалить, и проверка не
+# бывает чистой. Исключаем только сами таблицы: их индексы и ограничения попадают в
+# таблицу и уходят вместе с ней.
+ADMIN_TABLES = frozenset({"admin", "role", "roles_admins"})
+
+
+def include_object(
+    _object: object,
+    name: str | None,
+    type_: str,
+    _reflected: bool,
+    _compare_to: object,
+) -> bool:
+    """Не сравнивать таблицы админки с миграциями (см. ADMIN_TABLES)."""
+    return not (type_ == "table" and name in ADMIN_TABLES)
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -52,6 +70,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -59,7 +78,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)
 
     with context.begin_transaction():
         context.run_migrations()

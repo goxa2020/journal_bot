@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class Journal(Base):
     __tablename__ = "journals"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False, unique=True)  # ID журнала в edu-tpi
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)  # ID журнала в edu-tpi
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     teacher_name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
