@@ -25,3 +25,20 @@ scrape_configs:
       - targets: ["bot:8080"]
     metrics_path: /metrics
     scheme: http
+
+  # Бизнес-метрики воркера (sync_batch_*, sync_new_grades_total, notifications_total)
+  # и метрики задач (celery_task_*). Порт слушается только в сети monitoring.
+  - job_name: "worker"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["worker:9108"]
+    metrics_path: /metrics
+    scheme: http
+
+  # Метрики Celery из брокера: длина очередей, активные задачи, задачи по состояниям.
+  - job_name: "celery-exporter"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["celery-exporter:9808"]
+    metrics_path: /metrics
+    scheme: http

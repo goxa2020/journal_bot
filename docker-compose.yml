@@ -51,13 +51,27 @@ services:
     restart: always
     # Один воркер на все очереди (MVP): sync, notify, maintenance слушает одна команда.
     # Отдельные воркеры под очередь — не в фазе 1.
-    command: celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance -c ${CELERY_WORKER_CONCURRENCY:-2}
+    #
+    # Метрики: prometheus_client multiprocess пишет mmap-файлы в каталог ниже, а
+    # главный процесс воркера отдаёт их по HTTP (:9108) и /healthz. Каталог чистится
+    # до старта Celery, иначе после рестарта остались бы файлы прошлого запуска.
+    command: >
+      sh -c "mkdir -p /tmp/prometheus-multiproc &&
+             rm -f /tmp/prometheus-multiproc/*.db &&
+             exec celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance
+             -c ${CELERY_WORKER_CONCURRENCY:-2}"
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus-multiproc
     env_file:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - app
+      # Prometheus и celery-exporter живут в monitoring: без этой сети их не scrape'ить.
+      - monitoring
+    tmpfs:
+      - /tmp/prometheus-multiproc
     depends_on:
       redis:
         condition: service_healthy
@@ -66,14 +80,13 @@ services:
       pgbouncer:
         condition: service_healthy
     healthcheck:
-      # $$ — чтобы compose не подставил переменную, а её раскрыл shell в контейнере.
-      # Команда импортирует celery и приложение (~8 с), под нагрузкой дольше — поэтому
-      # таймаут с запасом; старт воркера на медленном диске тоже занимает время.
-      test: ["CMD-SHELL", "celery -A bot.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      # Дешёвая liveness-проба самого воркера: обычный HTTP на /healthz (:9108),
+      # а не `celery inspect ping`, который поднимает Celery CLI на ~8 секунд.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${WORKER_METRICS_PORT:-9108}/healthz || exit 1"]
       interval: 30s
-      timeout: 30s
+      timeout: 5s
       retries: 3
-      start_period: 120s
+      start_period: 60s
 
   beat:
     build:
@@ -240,6 +253,23 @@ services:
       - "--collector.filesystem.mount-points-exclude"
       - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
 
+  # celery-exporter: метрики Celery (длина очередей, активные задачи, задачи по
+  # состоянию и времени выполнения). Образ не тянет наш код: он читает брокер.
+  # На сервере образ нужно скачать демоном (BuildKit не резолвит ghcr.io/Docker Hub).
+  celery-exporter:
+    image: danihodovic/celery-exporter:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-celery-exporter
+    restart: unless-stopped
+    environment:
+      - CE_BROKER_URL=${CELERY_BROKER_URL}
+    networks:
+      # monitoring — Prometheus scrape'ит экспортёр; app — он читает Redis-брокер.
+      - monitoring
+      - app
+    depends_on:
+      redis:
+        condition: service_healthy
+
   prometheus:
     image: prom/prometheus:v2.43.0
     container_name: ${COMPOSE_PROJECT_NAME}-prometheus
@@ -283,6 +313,7 @@ services:
       - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources
       - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./configs/grafana/node-exporter.json:/var/lib/grafana/dashboards/node-exporter.json
+      - ./configs/grafana/celery-sync.json:/var/lib/grafana/dashboards/celery-sync.json
       - grafana-data:/var/lib/grafana
     user: "0"
     healthcheck:

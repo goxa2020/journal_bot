@@ -15,7 +15,7 @@ from typing import Any
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_process_init
+from celery.signals import worker_process_init, worker_process_shutdown, worker_ready, worker_shutdown
 
 from bot.celery_config import APP_NAME, CELERY_CONFIG, TASK_ROUTES
 
@@ -46,3 +46,39 @@ def _configure_task_logging(**_: Any) -> None:
     from bot.tasks.base import configure_task_logging  # noqa: PLC0415 — воркер уже стартовал
 
     configure_task_logging()
+
+
+#: HTTP-сервер метрик главного процесса воркера (W2.1); `None` — режим выключен.
+_metrics_server: Any = None
+
+
+@worker_ready.connect  # type: ignore[untyped-decorator]
+def _start_worker_metrics(**_: Any) -> None:
+    """Поднять `/metrics` и `/healthz` после старта пула, в главном процессе.
+
+    Именно `worker_ready`, а не `worker_init`: пул уже создан, поэтому HTTP-поток не
+    наследуется дочерними процессами. Без `PROMETHEUS_MULTIPROC_DIR` (тесты, локальный
+    запуск) сервер не поднимается.
+    """
+    global _metrics_server  # noqa: PLW0603 — состояние процесса, а не модуля
+    from bot.core.worker_metrics import start_worker_metrics_server  # noqa: PLC0415
+
+    _metrics_server = start_worker_metrics_server()
+
+
+@worker_shutdown.connect  # type: ignore[untyped-decorator]
+def _stop_worker_metrics(**_: Any) -> None:
+    """Остановить HTTP-сервер метрик вместе с воркером."""
+    global _metrics_server  # noqa: PLW0603
+    from bot.core.worker_metrics import stop_worker_metrics_server  # noqa: PLC0415
+
+    stop_worker_metrics_server(_metrics_server)
+    _metrics_server = None
+
+
+@worker_process_shutdown.connect  # type: ignore[untyped-decorator]
+def _mark_worker_process_dead(pid: int | None = None, **_: Any) -> None:
+    """Убрать mmap-файлы завершившегося дочернего процесса (multiprocess-режим)."""
+    from bot.core.worker_metrics import mark_worker_process_dead  # noqa: PLC0415
+
+    mark_worker_process_dead(pid)

@@ -16,6 +16,10 @@ services:
   beat:
     mem_limit: 256m
 
+  celery-exporter:
+    profiles: ["monitoring"]
+    mem_limit: 128m
+
   admin:
     ports:
       - "127.0.0.1:${ADMIN_PORT}:${ADMIN_PORT}"

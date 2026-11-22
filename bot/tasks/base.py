@@ -63,7 +63,16 @@ TASK_DURATION = prometheus_client.Histogram(
 )
 
 LOCK_VALUE = "1"
-WORKER_LOG_PATH = Path("logs/worker.log")
+WORKER_LOG_DIR = Path("logs")
+
+
+def worker_log_path(pid: int) -> Path:
+    """Файл лога процесса воркера: у каждого prefork-процесса свой писатель (W2.3).
+
+    loguru не гарантирует корректную ротацию, когда в один файл пишут несколько
+    процессов сразу, поэтому имя включает pid. Имена предсказуемы: `worker-<pid>.log`.
+    """
+    return WORKER_LOG_DIR / f"worker-{pid}.log"
 
 
 def run_async(coro: Coroutine[Any, Any, _T]) -> _T:
@@ -186,7 +195,7 @@ _LOGGING_READY: set[int] = set()
 
 
 def configure_task_logging() -> None:
-    """Логи задач: `logs/worker.log` с ротацией (как у бота) и stdout воркера.
+    """Логи задач: `logs/worker-<pid>.log` с ротацией (как у бота) и stdout воркера.
 
     Вызывается из сигнала `worker_process_init` — то есть в каждом процессе воркера,
     а не при импорте приложения: тесты и `celery inspect` не должны создавать файлы.
@@ -195,7 +204,8 @@ def configure_task_logging() -> None:
     if pid in _LOGGING_READY:
         return
 
-    WORKER_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    log_path = worker_log_path(pid)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     log_format = "{time} | {level} | {module}:{function}:{line} | {message}"
     level = "DEBUG" if settings.DEBUG else "INFO"
 
@@ -205,7 +215,7 @@ def configure_task_logging() -> None:
     logger.remove()
     logger.add(sys.__stdout__ or sys.stdout, level=level, format=log_format, colorize=False)
     logger.add(
-        WORKER_LOG_PATH,
+        log_path,
         level="DEBUG",
         format=log_format,
         rotation="100 KB",
