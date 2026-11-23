@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <4.0"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -291,7 +291,7 @@ resolution-markers = [
     "python_full_version >= '3.13' and python_full_version < '3.15'",
 ]
 dependencies = [
-    { name = "idna", marker = "python_full_version >= '3.13' and python_full_version < '3.15'" },
+    { name = "idna" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
@@ -307,8 +307,8 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 dependencies = [
-    { name = "idna", marker = "python_full_version < '3.13' or python_full_version >= '3.15'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "idna" },
+    { name = "typing-extensions", marker = "python_full_version < '3.15'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a1/98/7e457a3b014976887a050561955c0b76e1e7e2d6e27b78ecef2ef80518f2/anyio-4.16.0.tar.gz", hash = "sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb", size = 310971, upload-time = "2026-11-01T11:20:07.282Z" }
 wheels = [
@@ -1093,7 +1093,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/14/c7/2531aca6ab7baa377
 
 [[package]]
 name = "flask-security-too"
-version = "5.9.2"
+version = "5.9.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "email-validator" },
@@ -1105,9 +1105,9 @@ dependencies = [
     { name = "markupsafe" },
     { name = "wtforms" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/20/c8/86f0301830604a80e95dff7cc26c8ec3e5ed91ca4d448be654ed095ac58b/flask_security_too-5.9.2.tar.gz", hash = "sha256:614ed26d2d417d19e0831afb9ac242f2d93d35c157e64aad3d0091e309c507fb", size = 790745, upload-time = "2026-10-21T16:04:39.195Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7f/8ac6f122392a10813c1c7f67e9911d8eb365d10da90e73364232f9fd2f07/flask_security_too-5.9.3.tar.gz", hash = "sha256:d58c57dd7f2ed85cfff3aa2a7f6491a9ee56327a0a5a02397120ff1041d2aaa0", size = 803012, upload-time = "2026-11-19T23:26:17.117Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/3f/90dec3ec6d3bd0416322de3d9cffe514a1f2e43061d3c00941b2b8d54b81/flask_security_too-5.9.2-py3-none-any.whl", hash = "sha256:98f5e676767735dd2ff48afa92bcc9916778306b103999f8f4538a36b096f111", size = 515237, upload-time = "2026-10-21T16:04:37.534Z" },
+    { url = "https://files.pythonhosted.org/packages/51/4d/57a276c4a9a8688e19327f208b67521f8579d9b1613bf4211383007cb771/flask_security_too-5.9.3-py3-none-any.whl", hash = "sha256:47278d68126c9dbbf9fb149cd29445fb0b77d5242332f74834e7086780630679", size = 516560, upload-time = "2026-11-19T23:26:15.701Z" },
 ]
 
 [[package]]
