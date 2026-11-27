@@ -55,9 +55,13 @@ services:
     # Метрики: prometheus_client multiprocess пишет mmap-файлы в каталог ниже, а
     # главный процесс воркера отдаёт их по HTTP (:9108) и /healthz. Каталог чистится
     # до старта Celery, иначе после рестарта остались бы файлы прошлого запуска.
+    #
+    # Чистка не валит запуск: файл, оставшийся от прошлого запуска под другим uid, из
+    # каталога со sticky-битом не удалить, а воркер из-за этого не должен не стартовать
+    # (инцидент 27.11.2026: 294 рестарта, `PermissionError` на histogram_1.db).
     command: >
       sh -c "mkdir -p /tmp/prometheus-multiproc &&
-             rm -f /tmp/prometheus-multiproc/*.db &&
+             (rm -f /tmp/prometheus-multiproc/*.db 2>/dev/null || true) &&
              exec celery -A bot.celery_app worker -l INFO -Q sync,notify,maintenance
              -c ${CELERY_WORKER_CONCURRENCY:-2}"
     environment:
@@ -71,7 +75,9 @@ services:
       # Prometheus и celery-exporter живут в monitoring: без этой сети их не scrape'ить.
       - monitoring
     tmpfs:
-      - /tmp/prometheus-multiproc
+      # uid/gid и mode заданы явно: образ работает под 10001, а tmpfs по умолчанию
+      # принадлежит root. Без этого prometheus_client не создаёт mmap-файлы.
+      - /tmp/prometheus-multiproc:uid=10001,gid=10001,mode=1777
     depends_on:
       redis:
         condition: service_healthy
