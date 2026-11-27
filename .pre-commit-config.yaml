@@ -2,8 +2,13 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # `.specify/` — инфраструктура Spec Kit: файлы закреплены по хешу, любая правка
+      # (даже перевод строки в конце) висит как «modified managed file» в
+      # `specify integration status`. Форматировать их нельзя, обновляет сам Spec Kit.
       - id: trailing-whitespace
+        exclude: ^\.specify/
       - id: end-of-file-fixer
+        exclude: ^\.specify/
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
