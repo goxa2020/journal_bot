@@ -93,14 +93,21 @@ def _edu_client(redis: Redis | None) -> EduTpiClient:
     )
 
 
-def _schedule_notification(user_id: int, notices: Sequence[NewGradeNotice]) -> None:
-    """Поставить фоновое уведомление (`manual=False`-семантика) после коммита журнала.
+def _schedule_notification(
+    user_id: int,
+    notices: Sequence[NewGradeNotice],
+    *,
+    immediate: bool = False,
+) -> None:
+    """Поставить фоновое уведомление после коммита журнала.
 
+    `immediate=True` — режим ожидания: пользователь сам включил ускоренную проверку,
+    поэтому сообщение уходит сразу и ночью (политика «накопить до утра» не применяется).
     Ошибка брокера логируется и не отменяет уже сохранённые оценки: при повторном
     прогоне дедупликация `notify:sent:*` не даст дублей.
     """
     try:
-        send_grade_notification.delay(user_id, [notice.to_dict() for notice in notices])
+        send_grade_notification.delay(user_id, [notice.to_dict() for notice in notices], immediate=immediate)
     except Exception:  # noqa: BLE001 — оценки уже в БД, уведомление вторично
         logger.exception("notification scheduling failed user={}", user_id)
 
@@ -285,7 +292,7 @@ async def _sync_watch_user(user_id: int) -> tuple[int, int]:
         return 0, 1
 
     if summary.new_notices:
-        _schedule_notification(user_id, summary.new_notices)
+        _schedule_notification(user_id, summary.new_notices, immediate=True)
     return summary.new_grades, 0
 
 

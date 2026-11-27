@@ -111,9 +111,11 @@ async def test_cycle_syncs_waiting_users_and_notifies(monkeypatch: pytest.Monkey
     assert result["new_grades"] == 1
     assert result["errors"] == 0
     assert calls == [1, 2]
-    # Уведомление поставлено только по тому пользователю, у кого есть новые оценки.
+    # Уведомление поставлено только по тому пользователю, у кого есть новые оценки,
+    # и с флагом `immediate`: в режиме ожидания ночная политика не применяется.
     assert notify.call_count == 1
     assert notify.call_args.args[0] == 1
+    assert notify.call_args.kwargs["immediate"] is True
     assert FakeWatch.instances[0].synced == [1, 2]
 
 

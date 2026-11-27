@@ -333,6 +333,8 @@ admin-чат из БД: запрос прошёл без ошибок (`admins: 
   `active_users{watch_mode="true"}`;
 - решения по продлению, индексу и переиспользованию `GradeSyncService` записаны в
   [ARCHITECTURE.md](ARCHITECTURE.md) §7.5 и `specs/001-watch-mode/research.md`;
+- уведомления в режиме идут мимо ночной политики (`immediate=True`): включивший режим ночью
+  получает оценку сразу, а не утренней сводкой;
 - ручной сценарий в Telegram агентом не выполнялся: сценарий и проверки БД/Redis описаны
   в `specs/001-watch-mode/quickstart.md`, его нужно пройти перед выкладкой на прод.
 

@@ -253,9 +253,19 @@ def _parse_notices(payload: Sequence[dict[str, Any]]) -> list[NewGradeNotice]:
 
 # celery не поставляет типы, поэтому декоратор задачи для mypy нетипизированный.
 @celery_app.task(base=BaseTask, bind=True, name="bot.tasks.notify.send_grade_notification")  # type: ignore[untyped-decorator]
-def send_grade_notification(self: BaseTask, user_id: int, notices: list[dict[str, Any]]) -> dict[str, Any]:
-    """Немедленное уведомление о новых оценках (вход для фоновой синхронизации)."""
-    return run_async(notify_new_grades(user_id, _parse_notices(notices)))
+def send_grade_notification(
+    self: BaseTask,
+    user_id: int,
+    notices: list[dict[str, Any]],
+    immediate: bool = False,
+) -> dict[str, Any]:
+    """Немедленное уведомление о новых оценках (вход для фоновой синхронизации).
+
+    `immediate=True` — режим ожидания (фаза 5): пользователь включил проверку сам и
+    ждёт оценку сейчас, поэтому политика «ночь/утро» не применяется и сообщение уходит
+    сразу, как у ручной синхронизации. Дедупликация `notify:sent:*` действует всегда.
+    """
+    return run_async(notify_new_grades(user_id, _parse_notices(notices), manual=immediate))
 
 
 @celery_app.task(base=BaseTask, bind=True, name="bot.tasks.notify.send_night_batch")  # type: ignore[untyped-decorator]

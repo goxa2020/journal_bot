@@ -366,7 +366,7 @@ class EduTpiClient:
 | `sync_user_after_login` | `user_id` | Первая синхронизация после входа, без сообщения об успехе | 3 |
 | `sync_watch_mode_users` | — | Все пользователи с `watch_mode_expires_at > now()` | — |
 | `sync_all_users` | — | Групповая синхронизация по расписанию | — |
-| `send_grade_notification` | `user_id`, `notices` (JSON-записи) | Уведомление о новых оценках: днём сразу, ночью в очередь | 3 |
+| `send_grade_notification` | `user_id`, `notices` (JSON-записи), `immediate` | Уведомление о новых оценках: днём сразу, ночью в очередь; `immediate=True` (режим ожидания) — сразу и ночью | 3 |
 | `send_night_batch` | `user_id` | Отправка накопленного ночного списка (`eta` = утро) | 3 |
 | `cleanup_expired_watch_mode` | — | Сброс истёкшего режима ожидания | — |
 | `cleanup_old_logs` | `days=30` | Чистка `sync_logs` | — |
@@ -602,8 +602,9 @@ beat час (:10) → cleanup_expired_watch_mode → сброс истёкших
 * синхронизация идёт тем же `GradeSyncService.sync_user` с `sync_type=watch_mode`:
   групповой кеш журналов даёт один HTTP-запрос на журнал за цикл независимо от числа
   студентов группы в режиме;
-* уведомления — существующий путь `send_grade_notification` (политика день/ночь и
-  дедупликация не меняются);
+* уведомления — существующий путь `send_grade_notification` с `immediate=True`: в режиме
+  ожидания сообщение уходит сразу и ночью, потому что ускоренную проверку включил сам
+  пользователь; дедупликация `notify:sent:*` не меняется (решение 27.11.2026);
 * настройки: `WATCH_MODE_MINUTES`, `WATCH_MODE_TICK_MINUTES`, `WATCH_MODE_CLEANUP_MINUTE`;
 * метрики: `sync_new_grades{type="watch"}`, `active_users{watch_mode="true"}`.
 
