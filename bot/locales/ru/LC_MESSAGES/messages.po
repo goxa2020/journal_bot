@@ -355,6 +355,46 @@ msgstr "…и ещё {count}."
 msgid "last_grade.none"
 msgstr "Оценки не найдены"
 
+#: bot/handlers/callback/watch.py
+msgid "watch.title_off"
+msgstr "👁 Режим ожидания выключен"
+
+msgid "watch.title_on"
+msgstr "👁 Режим ожидания включён"
+
+msgid "watch.left"
+msgstr "Осталось: {minutes} мин"
+
+msgid "watch.hint_off"
+msgstr "Включите его: бот будет проверять журнал каждые {tick} мин в течение {minutes} мин и сразу присылать новые оценки."
+
+msgid "watch.hint_on"
+msgstr "Бот проверяет журнал каждые {tick} мин. Новые оценки придут уведомлением."
+
+msgid "watch.enable_btn"
+msgstr "Включить"
+
+msgid "watch.extend_btn"
+msgstr "Продлить"
+
+msgid "watch.off_btn"
+msgstr "Выключить"
+
+msgid "watch.refresh_btn"
+msgstr "Обновить"
+
+msgid "watch.menu_btn"
+msgstr "Главное меню"
+
+msgid "watch.enabled_alert"
+msgstr "Режим ожидания включён"
+
+msgid "watch.disabled_alert"
+msgstr "Режим ожидания выключен"
+
+msgid "watch.not_authenticated"
+msgstr "Сначала войдите в журнал edu-tpi — без этого проверять нечего."
+
 #~ msgid "bot started"
 #~ msgstr "Бот запущен!"
 
