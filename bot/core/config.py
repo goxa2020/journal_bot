@@ -137,6 +137,13 @@ class Settings(BotSettings, DBSettings, CacheSettings, CelerySettings):
     # docker-сети `monitoring`, наружу не публикуется.
     WORKER_METRICS_PORT: int = 9108
 
+    # Режим ожидания оценок (фаза 5, ARCHITECTURE §2/§6.6/§7.5): сколько действует один
+    # период, с каким шагом beat проверяет ожидающих и в какую минуту часа снимаются
+    # истёкшие. Значения по умолчанию — продуктовые: 30 минут, каждые 5 минут, :10.
+    WATCH_MODE_MINUTES: int = 30
+    WATCH_MODE_TICK_MINUTES: int = 5
+    WATCH_MODE_CLEANUP_MINUTE: int = 10
+
     # Ключ шифрования учётных данных edu-tpi. Обязателен: случайный ключ ломает
     # расшифровку паролей после рестарта, поэтому дефолта у поля нет.
     ENCRYPTION_KEY: str
