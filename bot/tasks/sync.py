@@ -28,7 +28,12 @@ from bot.core.errors import (
     PermanentError,
     RetryableError,
 )
-from bot.core.metrics import observe_batch_duration, observe_batch_users, observe_new_grades
+from bot.core.metrics import (
+    observe_batch_duration,
+    observe_batch_users,
+    observe_new_grades,
+    set_active_watch_users,
+)
 from bot.database.models.sync_log import SyncType
 from bot.integrations.edu_tpi import EduTpiClient
 from bot.integrations.journal_cache import JournalCache
@@ -37,6 +42,7 @@ from bot.services.auth import TokenService
 from bot.services.grade_sync import GradeSyncService, NewGradeNotice, SyncSummary
 from bot.services.group_sync import BatchSummary, GroupSyncService
 from bot.services.users import load_admin_ids, load_user_sync_info
+from bot.services.watch import WatchModeService
 from bot.tasks.base import BaseTask, run_async, send_telegram_message, task_lock, task_redis, task_session
 from bot.tasks.notify import notify_new_grades, send_grade_notification
 from bot.utils.formatters import format_sync_summary
@@ -148,8 +154,12 @@ async def _run_sync(
 
 
 def _metrics_type(sync_type: SyncType) -> str:
-    """Метка `type` для `sync_new_grades`: manual или auto."""
-    return "manual" if sync_type is SyncType.MANUAL else "auto"
+    """Метка `type` для `sync_new_grades`: manual, auto или watch (режим ожидания)."""
+    if sync_type is SyncType.MANUAL:
+        return "manual"
+    if sync_type is SyncType.WATCH_MODE:
+        return "watch"
+    return "auto"
 
 
 async def _track_sync(summary: SyncSummary, sync_type: SyncType) -> None:
@@ -248,6 +258,71 @@ def sync_user_after_login(self: BaseTask, user_id: int) -> dict[str, Any]:
         raise PermanentError(message)
 
     return summary.as_dict()
+
+
+#: Лок цикла режима ожидания: пересекающиеся циклы не должны проверять одних и тех же
+#: дважды. TTL — страховка от падения воркера, а не основной механизм.
+WATCH_CYCLE_LOCK_KEY = "watch:cycle:lock"
+WATCH_CYCLE_LOCK_TTL = 240
+
+
+async def _sync_watch_user(user_id: int) -> tuple[int, int]:
+    """Синхронизировать одного ожидающего; вернуть (новые оценки, ошибка 0/1).
+
+    Ошибка одного пользователя не должна ронять цикл: остальные ждут своей проверки.
+    """
+    try:
+        summary, error, _language = await _run_sync(user_id, sync_type=SyncType.WATCH_MODE)
+    except Exception:  # noqa: BLE001 — цикл обязан дойти до остальных ожидающих
+        logger.exception("watch sync failed user={}", user_id)
+        return 0, 1
+
+    if error is not None:
+        # «locked» — ручная синхронизация уже идёт, это не ошибка режима.
+        logger.warning("watch sync skipped user={} reason={}", user_id, error)
+        return 0, 0 if error == "locked" else 1
+    if summary is None:  # pragma: no cover — защита от рассинхронизации веток
+        return 0, 1
+
+    if summary.new_notices:
+        _schedule_notification(user_id, summary.new_notices)
+    return summary.new_grades, 0
+
+
+async def _run_watch_cycle() -> dict[str, Any]:
+    """Один цикл режима ожидания: только ожидающие, один запрос на журнал.
+
+    Список берётся из БД (условие `watch_mode_expires_at > now()`), поэтому цикл
+    корректен даже без часовой уборки: истёкших он просто не видит.
+    """
+    started = time.perf_counter()
+    async with task_lock(WATCH_CYCLE_LOCK_KEY, ttl=WATCH_CYCLE_LOCK_TTL, release=True) as acquired:
+        if not acquired:
+            return {"status": "skipped", "reason": "locked", "users": 0, "new_grades": 0, "errors": 0}
+
+        users = new_grades = errors = 0
+        processed: list[int] = []
+        async with task_redis() as redis, task_session() as session:
+            watch = WatchModeService(session=session, redis=redis, minutes=settings.WATCH_MODE_MINUTES)
+            user_ids = await watch.active_user_ids()
+            for user_id in user_ids:
+                users += 1
+                found, failed = await _sync_watch_user(user_id)
+                new_grades += found
+                errors += failed
+                processed.append(user_id)
+            await watch.mark_synced(processed)
+            set_active_watch_users(await watch.count_active())
+
+    duration = time.perf_counter() - started
+    logger.info("watch cycle users={} new={} errors={} duration={:.2f}s", users, new_grades, errors, duration)
+    return {
+        "status": "ok",
+        "users": users,
+        "new_grades": new_grades,
+        "errors": errors,
+        "duration_s": round(duration, 3),
+    }
 
 
 def _observe_batch(summary: BatchSummary) -> None:
@@ -352,3 +427,20 @@ def sync_all_users(self: BaseTask) -> dict[str, Any]:
     бюджет одной задачи. `expires=3600` не даёт выполнить устаревший дубль из очереди.
     """
     return run_async(_run_batch())
+
+
+# Celery 5.7.0 не поставляет типы, поэтому декоратор задачи для mypy нетипизированный.
+@celery_app.task(  # type: ignore[untyped-decorator]
+    base=BaseTask,
+    bind=True,
+    name="bot.tasks.sync.sync_watch_mode_users",
+    expires=240,
+    priority=5,
+)
+def sync_watch_mode_users(self: BaseTask) -> dict[str, Any]:
+    """Проверка пользователей в режиме ожидания (фаза 5, задача 5.2).
+
+    `expires` меньше шага beat (5 минут): устаревший цикл из очереди не выполняется —
+    следующий всё равно придёт вовремя. Очередь `sync`: пользователь ждёт результата.
+    """
+    return run_async(_run_watch_cycle())
