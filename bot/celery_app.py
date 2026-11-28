@@ -18,6 +18,7 @@ from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown, worker_ready, worker_shutdown
 
 from bot.celery_config import APP_NAME, CELERY_CONFIG, TASK_ROUTES
+from bot.core.config import settings
 
 celery_app = Celery(APP_NAME, include=["bot.tasks.service", "bot.tasks.sync", "bot.tasks.notify"])
 celery_app.config_from_object(CELERY_CONFIG, namespace=None)
@@ -28,12 +29,23 @@ celery_app.conf.task_routes = TASK_ROUTES
 # Расписание beat (фаза 4, задача 4.3): плановая синхронизация всех пользователей
 # каждые 6 часов — 00, 06, 12, 18 МСК. `expires` не даёт выполнить устаревший дубль из
 # очереди, если воркер отставал; сам прогон защищён батч-локом `sync:all:lock`.
-# Других записей здесь быть не должно: уведомления ставятся отложенными задачами (`eta`),
-# остальные задачи расписания — фазы 5–8.
+# Режим ожидания (фаза 5, ARCHITECTURE §6.6): `sync_watch_mode_users` каждые 5 минут и
+# часовая уборка истёкших режимов. `expires` у пятиминутной задачи меньше шага: если
+# воркер отставал, устаревший цикл не выполняется, следующий всё равно придёт через 5 минут.
 celery_app.conf.beat_schedule = {
     "sync-all-users": {
         "task": "bot.tasks.sync.sync_all_users",
         "schedule": crontab(minute=0, hour="*/6"),
+        "options": {"expires": 3600},
+    },
+    "sync-watch-mode-users": {
+        "task": "bot.tasks.sync.sync_watch_mode_users",
+        "schedule": crontab(minute=f"*/{settings.WATCH_MODE_TICK_MINUTES}"),
+        "options": {"expires": 240, "priority": 5},
+    },
+    "cleanup-expired-watch-mode": {
+        "task": "bot.tasks.service.cleanup_expired_watch_mode",
+        "schedule": crontab(minute=settings.WATCH_MODE_CLEANUP_MINUTE),
         "options": {"expires": 3600},
     },
 }

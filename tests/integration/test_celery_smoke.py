@@ -36,6 +36,9 @@ def test_ping_is_routed_to_maintenance() -> None:
         # Батч идёт в maintenance: точное правило стоит до wildcard `bot.tasks.sync.*`,
         # чтобы плановая синхронизация не занимала очередь пользователей (задача 4.3).
         ("bot.tasks.sync.sync_all_users", "maintenance"),
+        # Режим ожидания: цикл проверки — рядом с пользовательскими задачами (фаза 5).
+        ("bot.tasks.sync.sync_watch_mode_users", "sync"),
+        ("bot.tasks.service.cleanup_expired_watch_mode", "maintenance"),
         ("bot.tasks.notify.send_grade_notification", "notify"),
         ("bot.tasks.notify.send_night_batch", "notify"),
     ],
@@ -46,17 +49,30 @@ def test_tasks_are_routed_by_name(task_name: str, queue: str) -> None:
     assert route["queue"].name == queue
 
 
-def test_beat_schedule_has_only_sync_all_users() -> None:
-    """Расписание фазы 4: ровно одна запись — плановая синхронизация раз в 6 часов."""
+def test_beat_schedule_holds_plan_and_watch_tasks() -> None:
+    """Расписание: плановая синхронизация раз в 6 часов и режим ожидания (фаза 5)."""
     schedule = celery_app.conf.beat_schedule
 
-    assert list(schedule) == ["sync-all-users"]
+    assert set(schedule) == {"sync-all-users", "sync-watch-mode-users", "cleanup-expired-watch-mode"}
+
     entry = schedule["sync-all-users"]
     assert entry["task"] == "bot.tasks.sync.sync_all_users"
     assert entry["options"] == {"expires": 3600}
     assert isinstance(entry["schedule"], crontab)
     assert entry["schedule"].minute == {0}
     assert entry["schedule"].hour == {0, 6, 12, 18}
+
+    watch = schedule["sync-watch-mode-users"]
+    assert watch["task"] == "bot.tasks.sync.sync_watch_mode_users"
+    assert isinstance(watch["schedule"], crontab)
+    assert watch["schedule"].minute == {i for i in range(60) if i % 5 == 0}
+    # `expires` меньше шага: отставший цикл не выполняется, следующий придёт вовремя.
+    assert watch["options"] == {"expires": 240, "priority": 5}
+
+    cleanup = schedule["cleanup-expired-watch-mode"]
+    assert cleanup["task"] == "bot.tasks.service.cleanup_expired_watch_mode"
+    assert isinstance(cleanup["schedule"], crontab)
+    assert cleanup["schedule"].minute == {10}
 
 
 def test_batch_task_limits_are_larger_than_global_defaults() -> None:

@@ -350,6 +350,46 @@ msgstr "…and {count} more."
 msgid "last_grade.none"
 msgstr "No grades found"
 
+#: bot/handlers/callback/watch.py
+msgid "watch.title_off"
+msgstr "👁 Watch mode is off"
+
+msgid "watch.title_on"
+msgstr "👁 Watch mode is on"
+
+msgid "watch.left"
+msgstr "Time left: {minutes} min"
+
+msgid "watch.hint_off"
+msgstr "Turn it on: the bot will check the journal every {tick} min for {minutes} min and send new grades right away."
+
+msgid "watch.hint_on"
+msgstr "The bot checks the journal every {tick} min. New grades arrive as notifications."
+
+msgid "watch.enable_btn"
+msgstr "Turn on"
+
+msgid "watch.extend_btn"
+msgstr "Extend"
+
+msgid "watch.off_btn"
+msgstr "Turn off"
+
+msgid "watch.refresh_btn"
+msgstr "Refresh"
+
+msgid "watch.menu_btn"
+msgstr "Main menu"
+
+msgid "watch.enabled_alert"
+msgstr "Watch mode is on"
+
+msgid "watch.disabled_alert"
+msgstr "Watch mode is off"
+
+msgid "watch.not_authenticated"
+msgstr "Sign in to the edu-tpi journal first — there is nothing to check without it."
+
 #~ msgid "grades.col_subject"
 #~ msgstr "Subject"
 

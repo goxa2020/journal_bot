@@ -36,6 +36,15 @@ SYNC_BATCH_DURATION = prometheus_client.Histogram(
     "Длительность прогона массовой синхронизации, секунды.",
 )
 
+#: Пользователи с активным режимом ожидания (фаза 5, ARCHITECTURE §11):
+#: серия `active_users{watch_mode="true"}`. Ту же метрику в будущем можно расширить
+#: другими признаками (`is_authenticated`), не переименовывая её.
+ACTIVE_USERS = prometheus_client.Gauge(
+    "active_users",
+    "Активные пользователи по признаку.",
+    ["watch_mode"],
+)
+
 
 def observe_notification(kind: str, status: str) -> None:
     """Увеличить `notifications_total{kind,status}` на единицу."""
@@ -57,3 +66,8 @@ def observe_batch_users(status: str, count: int) -> None:
 def observe_batch_duration(seconds: float) -> None:
     """Записать длительность прогона в гистограмму (даже для пустого батча)."""
     SYNC_BATCH_DURATION.observe(max(seconds, 0.0))
+
+
+def set_active_watch_users(count: int) -> None:
+    """Записать число пользователей в режиме ожидания (фаза 5)."""
+    ACTIVE_USERS.labels(watch_mode="true").set(max(count, 0))

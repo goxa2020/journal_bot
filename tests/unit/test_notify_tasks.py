@@ -428,6 +428,25 @@ def test_grade_notification_task_is_idempotent_in_eager_mode(
     send.assert_awaited_once()
 
 
+def test_watch_mode_notification_is_sent_at_night(
+    monkeypatch: pytest.MonkeyPatch,
+    celery_eager,
+) -> None:
+    """Режим ожидания ночью шлёт сразу: `immediate=True` обходит политику «до утра»."""
+    server = FakeServer()
+    send = _install_server_env(monkeypatch, server)
+    monkeypatch.setattr("bot.services.notifications.now", lambda: NIGHT)
+
+    result = send_grade_notification.apply(
+        args=(1, [_notice().to_dict()]),
+        kwargs={"immediate": True},
+    ).get()
+
+    assert result["status"] == "sent"
+    assert result["kind"] == "immediate"
+    send.assert_awaited_once()
+
+
 def test_night_batch_task_sends_once_in_eager_mode(
     monkeypatch: pytest.MonkeyPatch,
     celery_eager,
