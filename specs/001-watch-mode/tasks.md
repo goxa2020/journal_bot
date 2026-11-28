@@ -95,7 +95,7 @@ description: "Task list for watch mode (фаза 5)"
 - [x] T018 [P] Обновить `docs/ROADMAP.md` §7 (статусы 5.1–5.4) и, если правила продления изменились, `docs/ARCHITECTURE.md` §2/§7.5
 - [x] T019 [P] Прогнать `just babel-compile` и проверить, что новые строки есть в обеих локалях (`msgfmt --check`)
 - [x] T020 Прогнать `just pre` (ruff, format, mypy) и `just test`; добиться зелёного по всему набору, не только по новым тестам
-- [ ] T021 Выполнить `specs/001-watch-mode/quickstart.md` (ручной сценарий в Telegram и проверки БД/Redis), зафиксировать результат в отчёте
+- [x] T021 Выполнить `specs/001-watch-mode/quickstart.md` (ручной сценарий в Telegram и проверки БД/Redis), зафиксировать результат в отчёте — пройден 27.11.2026 на проде (владелец бота), экран включения/продления/выключения работает, `sync_watch_mode_users` крутится по beat
 
 ---
 
